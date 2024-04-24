@@ -1,0 +1,68 @@
+[project]
+name = "botasaurus_driver" # Required
+version="4.0.0"  # Required
+description = "Super Fast, Super Anti-Detect, and Super Intuitive Web Driver"
+readme = {file = "README.md", content-type = "text/markdown"} # Optional
+requires-python = ">=3.5"
+license = {file = "LICENSE"}
+keywords = [
+    "webdriver", "browser", "captcha", "web-scraping",
+    "selenium", "navigator", "python3", "cloudflare",
+    "anti-delect", "anti-bot", "bot-detection",
+    "cloudflare-bypass", "distil", "anti-detection"]
+authors = [
+  {name = "Chetan", email = "chetan@omkar.cloud" } # Optional
+]
+
+maintainers = [
+  {name = "Chetan", email = "chetan@omkar.cloud" } # Optional
+]
+classifiers = [  # Optional
+  # How mature is this project? Common values are
+  #   3 - Alpha
+  #   4 - Beta
+  #   5 - Production/Stable
+
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Internet :: WWW/HTTP :: Browsers",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+
+]
+
+dependencies = [
+      "websockets>=11",
+      "deprecated",
+      "botasaurus-proxy-authentication",
+      "psutil"
+]
+
+#
+[project.urls]
+"Homepage" = "https://github.com/omkarcloud/botasaurus-driver"
+"Bug Reports" = "https://github.com/omkarcloud/botasaurus-driver/issues"
+"Source" = "https://github.com/omkarcloud/botasaurus-driver"
+
+
+[tool.setuptools]
+include-package-data = true
+packages = ["botasaurus_driver"]
+
+[build-system]
+requires = ["setuptools>=43.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "build",
+    "sphinx",
+    "sphinx_markdown_builder",
+    "sphinx_autodoc_typehints",
+    "furo",
+    "pygments",
+]
