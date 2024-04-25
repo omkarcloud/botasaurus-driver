@@ -223,18 +223,6 @@ class Browser:
 
         self.config.host = self.config.host or "127.0.0.1"
         self.config.port = self.config.port or free_port()
-        if not os.path.exists(self.config.browser_executable_path):
-            raise DriverException(
-                (
-                    """
-                ---------------------
-                Could not determine browser executable.
-                ---------------------
-                Make sure your browser is installed in the default location (path).
-                If you are sure about the browser executable."""
-                )
-            )
-
         exe = self.config.browser_executable_path
         params = self.config()
         self._process: asyncio.subprocess.Process = (

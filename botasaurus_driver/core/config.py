@@ -285,63 +285,63 @@ class Config:
     #     return d
 
 
+def get_linux_executable_path():
+    import shutil
+    
+    for executable in (
+        "google-chrome",
+        "google-chrome-stable",
+        "google-chrome-beta",
+        "google-chrome-dev",
+        "chromium-browser",
+        "chromium",
+    ):
+        path = shutil.which(executable)
+        if path is not None:
+            return path
+
+    raise FileNotFoundError("You don't have Google Chrome installed on your Linux system. Please install it by visiting https://www.google.com/chrome/.")
 
 def find_chrome_executable(return_all=False):
     """
-    Finds the chrome, beta, canary, chromium executable
-    and returns the disk path
+    Determines the path to the Google Chrome executable on the system based on the platform.
+    
+    :return: Full path to the Google Chrome executable if found, otherwise None.
     """
-    candidates = []
-    if is_posix:
-        for item in os.environ.get("PATH").split(os.pathsep):
-            for subitem in (
-                "google-chrome",
-                "chromium",
-                "chromium-browser",
-                "chrome",
-                "google-chrome-stable",
-            ):
-                candidates.append(os.sep.join((item, subitem)))
-        if "darwin" in sys.platform:
-            candidates += [
-                "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-                "/Applications/Chromium.app/Contents/MacOS/Chromium",
-            ]
-
-    else:
-        for item in map(
-            os.environ.get,
-            ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA", "PROGRAMW6432"),
-        ):
-            if item is not None:
-                for subitem in (
-                    "Google/Chrome/Application",
-                    "Google/Chrome Beta/Application",
-                    "Google/Chrome Canary/Application",
-                ):
-                    candidates.append(os.sep.join((item, subitem, "chrome.exe")))
-    rv = []
-    for candidate in candidates:
-        if os.path.exists(candidate) and os.access(candidate, os.X_OK):
-            rv.append(candidate)
+    if sys.platform.startswith("linux"):
+        return get_linux_executable_path()  # This function already exists in your code and finds Chrome on Linux.
+    elif sys.platform.startswith("darwin"):
+        possible_paths = [
+                "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        ]
+        for path in possible_paths:
+            if os.path.isfile(path):
+                return path
+        
+        raise FileNotFoundError("You don't have Google Chrome installed on your Linux system. Please install it by visiting https://www.google.com/chrome/.")
+        # Path for Google Chrome on macOS.
+    elif sys.platform.startswith("win"):
+        PROGRAMFILES = f"{os.environ.get('PROGRAMW6432') or os.environ.get('PROGRAMFILES')}\\Google\\Chrome\\Application\\chrome.exe"
+        if os.path.exists(PROGRAMFILES):
+            path = PROGRAMFILES
         else:
-            pass
+            PROGRAMFILESX86 = (
+                f"{os.environ.get('PROGRAMFILES(X86)')}\\Google\\Chrome\\Application\\chrome.exe"
+            )
+            if os.path.exists(PROGRAMFILESX86):
+                path = PROGRAMFILESX86
+            else:
+                LOCALPATH = (
+                    f"{os.environ.get('LOCALAPPDATA')}\\Google\\Chrome\\Application\\chrome.exe"
+                )
+                if os.path.exists(LOCALPATH):
+                    path = LOCALPATH
+                else:
+                    path = None
+        if not path:
+            raise FileNotFoundError("You don't have Google Chrome installed on your Linux system. Please install it by visiting https://www.google.com/chrome/.")
+        else:
+            return path
 
-    winner = None
+    return None
 
-    if return_all and rv:
-        return rv
-
-    if rv and len(rv) > 1:
-        # assuming the shortest path wins
-        winner = min(rv, key=lambda x: len(x))
-
-    elif len(rv) == 1:
-        winner = rv[0]
-
-    if winner:
-        return os.path.normpath(winner)
-
-    raise FileNotFoundError(
-        "could not find a valid chrome browser binary. please make sure chrome is installed."
-    )
