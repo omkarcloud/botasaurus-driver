@@ -188,7 +188,7 @@ class Config:
         self.default_arguments = [
             "--start-maximized",
             "--no-first-run",
-            "--disable-site-isolation-trials",
+            # "--disable-site-isolation-trials",
             "--disable-backgrounding-occluded-windows",
             "--disable-hang-monitor",
             "--metrics-recording-only",

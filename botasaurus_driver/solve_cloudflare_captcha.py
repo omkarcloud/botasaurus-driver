@@ -6,7 +6,7 @@ label_selector = "label.ctp-checkbox-label"
 
 
 def get_rayid(driver):
-    ray = driver.get_element_text(".ray-id code")
+    ray = driver.get_text(".ray-id code")
     if ray:
         return ray
 

@@ -21,6 +21,11 @@ class IframeNotFoundException(DriverException):
     def init(self, iframe_id):
         super().init(f"Iframe {iframe_id} does not exist in the targets.")
 
+
+class NoProfileException(DriverException):
+    def init(self):
+        super().init(f"No profile provided.")
+
 class ElementWithTextNotFoundException(DriverException):
     def __init__(self, text):
         super().__init__(f"Cannot find element containing text: '{text}'.")

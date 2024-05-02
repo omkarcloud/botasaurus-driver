@@ -19,7 +19,7 @@ from .driver_utils import (
     sleep_for_n_seconds,
     sleep_forever,
 )
-from .exceptions import CheckboxElementForLabelNotFoundException, ElementWithTextNotFoundException, IframeNotFoundException, InputElementForLabelNotFoundException,  PageNotFoundException
+from .exceptions import CheckboxElementForLabelNotFoundException, ElementWithTextNotFoundException, IframeNotFoundException, InputElementForLabelNotFoundException, NoProfileException,  PageNotFoundException
 from .local_storage_driver import LocalStorage
 from .opponent import Opponent
 from .solve_cloudflare_captcha import bypass_if_detected
@@ -464,6 +464,14 @@ class DriverBase():
     @property
     def local_storage(self):
         return LocalStorage(self)
+
+    @property
+    def profile(self):
+        from .profile import Profile
+        if self.config.profile:
+            return Profile(self.config.profile)
+        else: 
+            raise NoProfileException()
     
     def _update_targets(self):
         return self._run(self._browser.update_targets())
@@ -681,7 +689,7 @@ class DriverBase():
 
         return [elem.src for elem in elems]
 
-    def get_element_text(self, selector: str, wait: Optional[int] = Wait.SHORT) -> str:
+    def get_text(self, selector: str, wait: Optional[int] = Wait.SHORT) -> str:
         elem = self.wait_for_element(selector, wait)
         return elem.text
 
