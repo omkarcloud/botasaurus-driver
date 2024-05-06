@@ -67,11 +67,16 @@ def get_iframe_tab(driver, internal_elem):
         time.sleep(0.1)
         # time.sleep(2)
 
-def wait_till_document_is_ready(tab):
+def wait_till_document_is_ready(tab, wait_for_complete_page_load):
+    
+    if wait_for_complete_page_load:
+        script = "return document.readyState === 'complete'"
+    else:
+        script = "return document.readyState === 'interactive' || document.readyState === 'complete'"
+
     while True:
         sleep(0.1)
         try:
-            script = "return document.readyState === 'complete'"
             response = tab._run(tab.evaluate(script, await_promise=True))
             if response:
                 break
@@ -84,7 +89,7 @@ def add_loop_to_tab(value, loop):
 def wait_for_iframe_tab_load(driver, iframe_tab):
     add_loop_to_tab(iframe_tab, driver._loop)
     iframe_tab.websocket_url = iframe_tab.websocket_url.replace("iframe", "page")
-    wait_till_document_is_ready(iframe_tab)
+    wait_till_document_is_ready(iframe_tab, True)
 
 def create_iframe_element(driver, internal_elem):
     iframe_tab = get_iframe_tab(driver, internal_elem)
@@ -426,6 +431,12 @@ def get_input_el(driver, label, wait, type):
     
     return None
 
+def block_if_should(driver):
+        if driver.config.block_images_and_css:
+            driver.block_images_and_css()
+        elif driver.config.block_images:
+            driver.block_images()
+
 class DriverBase():
     def __init__(self, config,_tab_value, _loop, _browser):
             self.config = config
@@ -453,6 +464,13 @@ class DriverBase():
     def current_url(self):
         return self.run_js("return window.location.href")
 
+
+    @property
+    def title(self):
+        el = self.select('title', None)
+        if el:
+            return el.text
+
     @property
     def page_text(self):
         return self.select("body").text
@@ -479,18 +497,20 @@ class DriverBase():
     def get(self, link: str, bypass_cloudflare=False, wait: Optional[int] = None):
         self._tab = self._run(self._browser.get(link))
         self.sleep(wait)
-        if self.config.wait_for_complete_page_load:
-            wait_till_document_is_ready(self._tab)
+        wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load)
         if bypass_cloudflare:
             self.detect_and_bypass_cloudflare()
+        block_if_should(self)
 
     def get_via(self, link: str, source_referrer: str, bypass_cloudflare=False, wait: Optional[int] = None):
         self._tab = self._run(self._browser.get(link, referrer=source_referrer))
         self.sleep(wait)
-        if self.config.wait_for_complete_page_load:
-            wait_till_document_is_ready(self._tab)
+        
+        wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load)
+        
         if bypass_cloudflare:
             self.detect_and_bypass_cloudflare()
+        block_if_should(self)
 
     def google_get(
         self, link: str, bypass_cloudflare=False, wait: Optional[int] = None, accept_google_cookies: bool = False
@@ -514,8 +534,13 @@ class DriverBase():
                     break
                 sleep(0.1)
         self.sleep(wait)
+
+        wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load)
+
         if bypass_cloudflare:
             self.detect_and_bypass_cloudflare()
+
+        block_if_should(self)
 
     def run_js(self, script: str) -> Any:
         # Run it in IIFE for isloation
@@ -792,7 +817,7 @@ class DriverBase():
 
     def get_bot_detected_by(self) -> str:
         clf = self.select("#challenge-running", None)
-        if clf is not None:
+        if clf is not None or self.title == "Just a moment...":
             return Opponent.CLOUDFLARE
 
         pmx = self.get_element_containing_text("Please verify you are a human", None)
@@ -889,13 +914,13 @@ class DriverBase():
 
         if wait is None:
             if check_page(self, expected_url):
-                wait_till_document_is_ready(self._tab)
+                wait_till_document_is_ready(self._tab, True)
                 return True
         else:
             time = 0
             while time < wait:
                 if check_page(self, expected_url):
-                    wait_till_document_is_ready(self._tab)
+                    wait_till_document_is_ready(self._tab, True)
                     return True
                 sleep_time = 0.2
                 time += sleep_time
@@ -967,11 +992,8 @@ class Driver(DriverBase):
         self._loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
         self._browser: Browser = self._run(start(self.config))
-
-        if self.config.block_images_and_css:
-            self.block_urls(['.css', '.jpg', '.jpeg', '.png', '.svg', '.gif', '.woff', '.pdf', '.zip'])            
-        elif self.config.block_images:
-            self.block_urls(['.jpg', '.jpeg', '.png', '.svg', '.gif', '.woff', '.pdf', '.zip'])
+    
+        block_if_should(self)
 
         if self.config.tiny_profile:
             load_cookies(self, self.config.profile)        
@@ -982,6 +1004,12 @@ class Driver(DriverBase):
         # You usually don't need to close it because we automatically close it when script is cancelled (ctrl + c) or completed 
         self.run_cdp_command(enable_network())
         self.run_cdp_command(block_urls(urls))
+
+    def block_images_and_css(self) -> None:
+        self.block_urls(['.css', '.jpg', '.jpeg', '.png', '.svg', '.gif', '.woff', '.pdf', '.zip'])    
+
+    def block_images(self) -> None:
+        self.block_urls(['.jpg', '.jpeg', '.png', '.svg', '.gif', '.woff', '.pdf', '.zip'])
 
     def close(self) -> None:
         if self.config.tiny_profile:
