@@ -92,7 +92,15 @@ def bypass_if_detected(driver, raise_exception=True):
         start_time = time()
 
         while True:
-            checkbox = get_iframe(driver).select(label_selector, None)
+            iframe = get_iframe(driver)
+            while not iframe:
+                opponent = driver.get_bot_detected_by()
+                if opponent != Opponent.CLOUDFLARE:
+                    return
+                sleep(1)
+                iframe = get_iframe(driver)
+
+            checkbox = iframe.select(label_selector, None)
             if checkbox:
                 checkbox.click()
                 wait_till_cloudflare_leaves(driver, previous_ray_id, raise_exception)

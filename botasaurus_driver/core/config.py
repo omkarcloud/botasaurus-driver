@@ -3,6 +3,7 @@ import os
 import sys
 from ..driver_utils import convert_to_absolute_profile_path
 from .env import is_vmish, is_docker
+from ..exceptions import DriverException
 
 
 def temp_profile_dir(port, parent_folder="bota"):
@@ -81,11 +82,29 @@ def create_extensions_string(extensions):
             return "--load-extension=" + extensions_str
 
 def add_essential_options(options, profile, window_size, user_agent):
+
+    if user_agent and user_agent != "REAL":
+        from ..user_agent import UserAgentInstance, UserAgent
+
+        if user_agent == UserAgent.RANDOM:
+            if profile is not None:
+                raise DriverException("When working with profiles, the user_agent must remain consistent and be generated based on the profile's unique hash. Instead of using a Random User Agent, use user_agent=UserAgent.HASHED.")
+            else:            
+                user_agent = UserAgentInstance.get_random()
+        elif user_agent == UserAgent.HASHED:
+            user_agent = UserAgentInstance.get_hashed(profile)
+        else:
+            user_agent = user_agent
+
+        options.add_argument(f'--user-agent={user_agent}')    
     if window_size and window_size != "REAL":
         from ..window_size import WindowSizeInstance, WindowSize
 
         if window_size == WindowSize.RANDOM:
-            window_size = WindowSizeInstance.get_random()
+            if profile is not None:
+                raise DriverException("When working with profiles, the window_size must remain consistent and be generated based on the profile's unique hash. Instead of using a Random Window Size, use window_size=WindowSize.HASHED.")
+            else:
+                window_size = WindowSizeInstance.get_random()
         elif window_size == WindowSize.HASHED:
             window_size = WindowSizeInstance.get_hashed(profile)
         else:
@@ -94,17 +113,6 @@ def add_essential_options(options, profile, window_size, user_agent):
         window_size = WindowSize.window_size_to_string(window_size)
         options.add_argument(f"--window-size={window_size}")
 
-    if user_agent and user_agent != "REAL":
-        from ..user_agent import UserAgentInstance, UserAgent
-
-        if user_agent == UserAgent.RANDOM:
-            user_agent = UserAgentInstance.get_random()
-        elif user_agent == UserAgent.HASHED:
-            user_agent = UserAgentInstance.get_hashed(profile)
-        else:
-            user_agent = user_agent
-
-        options.add_argument(f'--user-agent={user_agent}')
 
 class Config:
     """
