@@ -77,7 +77,7 @@ def wait_till_document_is_ready(tab, wait_for_complete_page_load):
     while True:
         sleep(0.1)
         try:
-            response = tab._run(tab.evaluate(script, await_promise=True))
+            response = tab._run(tab.evaluate(script, await_promise=False))
             if response:
                 break
         except Exception as e:
@@ -89,7 +89,7 @@ def add_loop_to_tab(value, loop):
 def wait_for_iframe_tab_load(driver, iframe_tab):
     add_loop_to_tab(iframe_tab, driver._loop)
     iframe_tab.websocket_url = iframe_tab.websocket_url.replace("iframe", "page")
-    wait_till_document_is_ready(iframe_tab, True)
+    # wait_till_document_is_ready(iframe_tab, True)
 
 def create_iframe_element(driver, internal_elem):
     iframe_tab = get_iframe_tab(driver, internal_elem)
@@ -503,7 +503,9 @@ class DriverBase():
         block_if_should(self)
 
     def get_via(self, link: str, source_referrer: str, bypass_cloudflare=False, wait: Optional[int] = None):
+        
         self._tab = self._run(self._browser.get(link, referrer=source_referrer))
+        
         self.sleep(wait)
         
         wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load)
@@ -578,6 +580,21 @@ class DriverBase():
         self, text: str, type: Optional[str] = None, wait: Optional[int] = Wait.SHORT
     ) -> List[Element]:
         elems_coro = self._tab.find_all(text, type=type, timeout=wait)
+        elems = self._run(elems_coro)
+        return [make_element(self, self._tab, e) for e in elems]
+
+
+    def get_element_with_exact_text(
+        self, text: str, type: Optional[str] = None, wait: Optional[int] = Wait.SHORT
+    ) -> Element:
+        elem_coro = self._tab.find(text, type=type, timeout=wait, exact_match=True)
+        elem = self._run(elem_coro)
+        return make_element(self, self._tab, elem) if elem else None
+
+    def get_all_elements_with_exact_text(
+        self, text: str, type: Optional[str] = None, wait: Optional[int] = Wait.SHORT, 
+    ) -> List[Element]:
+        elems_coro = self._tab.find_all(text, type=type, timeout=wait, exact_match=True)
         elems = self._run(elems_coro)
         return [make_element(self, self._tab, e) for e in elems]
 
@@ -816,11 +833,11 @@ class DriverBase():
         sleep_forever()
 
     def get_bot_detected_by(self) -> str:
-        clf = self.select("#challenge-running", None)
+        clf = self.select("#challenge-running", wait=None)
         if clf is not None or self.title == "Just a moment...":
             return Opponent.CLOUDFLARE
 
-        pmx = self.get_element_containing_text("Please verify you are a human", None)
+        pmx = self.get_element_containing_text("Please verify you are a human", wait=None)
 
         if pmx is not None:
             return Opponent.PERIMETER_X

@@ -21,7 +21,12 @@ def isbanned( node):
 
 def issametype(node, type):
         return node.node_name.lower() ==type
-
+def append_safe(results, elem, text, exact_match):
+            if exact_match:
+                if text == elem.text:
+                    results.append(elem)
+            else:
+                results.append(elem)
 class Tab(Connection):
     """
     :ref:`tab` is the controlling mechanism/connection to a 'target',
@@ -164,7 +169,8 @@ class Tab(Connection):
         best_match: bool = False,
         return_enclosing_element=True,
         timeout: Union[int, float] = 10,
-        type=None
+        type=None, 
+        exact_match = False,
     ):
         """
         find single element by text
@@ -202,13 +208,13 @@ class Tab(Connection):
         now = loop.time()
 
         item = await self.find_element_by_text(
-            text, best_match, return_enclosing_element, type=type
+            text, best_match, return_enclosing_element, type=type, exact_match=exact_match
         )
         if timeout:
             while not item:
                 await self
                 item = await self.find_element_by_text(
-                    text, best_match, return_enclosing_element, type=type
+                    text, best_match, return_enclosing_element, type=type, exact_match=exact_match
                 )
                 if loop.time() - now > timeout:
                     return None
@@ -249,7 +255,8 @@ class Tab(Connection):
         self,
         text: str,
         timeout: Union[int, float] = 10,
-        type=None
+        type=None,
+        exact_match = False,
     ):
         """
         find multiple elements by text
@@ -264,11 +271,11 @@ class Tab(Connection):
         loop = asyncio.get_running_loop()
         now = loop.time()
 
-        results = await self.find_elements_by_text(text, type=type)
+        results = await self.find_elements_by_text(text, type=type, exact_match=exact_match)
         if timeout:
             while not results:
                 await self
-                results = await self.find_elements_by_text(text, type=type)
+                results = await self.find_elements_by_text(text, type=type, exact_match=exact_match)
                 if loop.time() - now > timeout:
                     return []
                 await self.sleep(0.5)
@@ -424,6 +431,7 @@ class Tab(Connection):
         text: str,
         tag_hint: Optional[str] = None,
         type=None,
+        exact_match = False,
     ) -> List[element.Element]:
         """
         returns element which match the given text.
@@ -462,7 +470,7 @@ class Tab(Connection):
                 elem = element.create(node, self, doc)
             except:  # noqa
                 continue
-            await self.checktextnodeandappend(type, results, elem)  
+            await self.checktextnodeandappend(type, results, elem, text, exact_match)  
 
         # since we already fetched the entire doc, including shadow and frames
         # let's also search through the iframes
@@ -499,6 +507,7 @@ class Tab(Connection):
         best_match: Optional[bool] = False,
         return_enclosing_element: Optional[bool] = True,
         type=None,
+        exact_match= False,
     ) -> Union[element.Element, None]:
         """
         finds and returns the first element containing <text>, or best match
@@ -536,7 +545,7 @@ class Tab(Connection):
                 elem = element.create(node, self, doc)
             except:  # noqa
                 continue
-            await self.checktextnodeandappend(type, results, elem)  
+            await self.checktextnodeandappend(type, results, elem, text, exact_match)   
 
         # since we already fetched the entire doc, including shadow and frames
         # let's also search through the iframes
@@ -561,22 +570,16 @@ class Tab(Connection):
         try:
             if not results:
                 return
-            if best_match:
-                closest_by_length = min(
-                    results, key=lambda el: abs(len(text) - len(el.text_all))
-                )
-                elem = closest_by_length or results[0]
-
-                return elem
-            else:
                 # naively just return the first result
-                for elem in results:
-                    if elem:
-                        return elem
+            for elem in results:
+                if elem:
+                    return elem
         finally:
             await self.send(cdp.dom.disable())
 
-    async def checktextnodeandappend(self, type, results, elem):
+    async def checktextnodeandappend(self, type, results, elem, text, exact_match):
+        
+
         if elem.node_type == 3:
                 # if found element is a text node (which is plain text, and useless for our purpose),
                 # we return the parent element of the node (which is often a tag which can have text between their
@@ -588,17 +591,17 @@ class Tab(Connection):
             if final:
                 if type:
                     if issametype(final.node, type):
-                        results.append(final)  
+                        append_safe(results, final, text, exact_match)
                 else:
                     if not isbanned(final.node):
-                        results.append(final)  
+                        append_safe(results, final, text, exact_match)
         else:
                 if type:
                     if issametype(elem.node, type):
-                        results.append(elem)
+                        append_safe(results, elem, text, exact_match)
                 else:
                     if not isbanned(elem.node):
-                        results.append(elem)
+                        append_safe(results, elem, text, exact_match)
 
 
     async def evaluate(
@@ -629,9 +632,6 @@ if (resp instanceof Promise) {
         remote_object, errors = response
         if errors:
             raise JavascriptException(errors)
-            if not return_by_value:
-                return remote_object, errors
-            return errors.to_json()
         if remote_object:
             if return_by_value:
                 if remote_object.value:
@@ -639,16 +639,6 @@ if (resp instanceof Promise) {
 
             else:
                 return remote_object, errors
-            # if getattr(remote_object, "subtype", None) == "error":
-            #     val = remote_object.description
-            #     return {"error": val, "stack": errors}
-        #     try:
-        #         return json.loads(remote_object.value)
-        #     except:
-        #         return remote_object.value
-        # if exc:
-        #     return exc
-
     async def js_dumps(
         self, obj_name: str, return_by_value: Optional[bool] = True
     ) -> typing.Union[
