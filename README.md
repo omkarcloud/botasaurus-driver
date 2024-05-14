@@ -82,7 +82,6 @@ Botasaurus Driver provides several handy methods for web automation tasks such a
   text_content = iframe.select("body label").run_js("(el) => el.textContent")
   ```
 
-select_iframe
 - Miscellaneous:
   ```python
   form.type("input[name='password']", "secret_password")  # Type into a form field
