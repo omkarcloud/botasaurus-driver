@@ -1,6 +1,6 @@
 # Botasaurus Driver
 
-Botasaurus Driver is a powerful Driver Automation Python library that offers the following advantages:
+Botasaurus Driver is a powerful Driver Automation Python library that offers the following benefits:
 
 
 - It is indistinguishable from a real browser, allowing it to pass E-V-E-R-Y bot detection challenge.
@@ -79,7 +79,7 @@ Botasaurus Driver provides several handy methods for web automation tasks such a
   ```python
   driver.get("https://www.g2.com/products/github/reviews.html?page=5&product_id=github")
   iframe = driver.select_iframe("#turnstile-wrapper iframe")
-  text_content = iframe.select("body label").run_js("(el) => el.textContent")
+  text_content = iframe.select("body label").text
   ```
 
 - Miscellaneous:
