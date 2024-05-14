@@ -18,6 +18,12 @@ from .config import PathLike, Config, free_port, is_posix
 from .connection import Connection
 from .custom_storage_cdp import  get_cookies, set_cookies
 
+import os
+import signal
+
+def kill_process(pid):
+    os.kill(pid, signal.SIGTERM)
+
 def get_folder_name_from_path(absolute_path):
     """
     Returns the folder name from an absolute path.
@@ -364,25 +370,29 @@ class Browser:
 
 
     def close(self):
-        try:
-            # asyncio.get_running_loop().create_task(self.connection.send(cdp.browser.close()))
-            asyncio.get_event_loop().create_task(self.connection.aclose())
-        except RuntimeError:
-            if self.connection:
-                try:
-                    # asyncio.run(self.connection.send(cdp.browser.close()))
-                    asyncio.run(self.connection.aclose())
-                except Exception:
-                    pass
+        # No need we are killing
+        # try:
+        #     # asyncio.get_running_loop().create_task(self.connection.send(cdp.browser.close()))
+        #     asyncio.get_event_loop().create_task(self.connection.aclose())
+        # except RuntimeError:
+        #     if self.connection:
+        #         try:
+        #             # asyncio.run(self.connection.send(cdp.browser.close()))
+        #             asyncio.run(self.connection.aclose())
+        #         except Exception:
+        #             pass
+        # except Exception:   
+        #     pass
+        
         for _ in range(3):
             try:
-                self._process.terminate()
-            
+                # print("killing browser")
+                kill_process(self._process_pid)
+                # print("killed browser")            
                 break
             except (Exception,):
                 try:
-                    self._process.kill()
-                
+                    kill_process(self._process_pid)
                     break
                 except (Exception,):
                     try:

@@ -324,9 +324,16 @@ class Connection(metaclass=CantTouchThis):
 
             if not _is_update:
                 await self._register_handlers()
-            await self.websocket.send(tx.message)
+            
+            maxtmt = 180
+            await asyncio.wait_for(self.websocket.send(tx.message), timeout=maxtmt)
             try:
-                return await tx
+                try:
+                  u =  await asyncio.wait_for(tx, timeout=maxtmt)
+                except asyncio.TimeoutError as e:
+                  raise e
+
+                return u
             except ProtocolException as e:
                 e.message += f"\ncommand:{tx.method}\nparams:{tx.params}"
                 raise e

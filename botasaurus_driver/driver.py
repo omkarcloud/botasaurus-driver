@@ -22,7 +22,7 @@ from .driver_utils import (
 from .exceptions import CheckboxElementForLabelNotFoundException, ElementWithTextNotFoundException, IframeNotFoundException, InputElementForLabelNotFoundException, NoProfileException,  PageNotFoundException
 from .local_storage_driver import LocalStorage
 from .opponent import Opponent
-from .solve_cloudflare_captcha import bypass_if_detected
+from .solve_cloudflare_captcha import bypass_if_detected,  wait_till_document_is_ready
 from .core.browser import Browser
 from .core.util import start
 from .core.tab import Tab
@@ -66,22 +66,6 @@ def get_iframe_tab(driver, internal_elem):
 
         time.sleep(0.1)
         # time.sleep(2)
-
-def wait_till_document_is_ready(tab, wait_for_complete_page_load):
-    
-    if wait_for_complete_page_load:
-        script = "return document.readyState === 'complete'"
-    else:
-        script = "return document.readyState === 'interactive' || document.readyState === 'complete'"
-
-    while True:
-        sleep(0.1)
-        try:
-            response = tab._run(tab.evaluate(script, await_promise=False))
-            if response:
-                break
-        except Exception as e:
-            print("An exception occurred", e)
 
 def add_loop_to_tab(value, loop):
     value.loop = loop
@@ -502,9 +486,10 @@ class DriverBase():
             self.detect_and_bypass_cloudflare()
         block_if_should(self)
 
-    def get_via(self, link: str, source_referrer: str, bypass_cloudflare=False, wait: Optional[int] = None):
+    def get_via(self, link: str, referer: str, bypass_cloudflare=False, wait: Optional[int] = None):
         
-        self._tab = self._run(self._browser.get(link, referrer=source_referrer))
+        referer = referer.rstrip("/")  + "/"
+        self._tab = self._run(self._browser.get(link, referrer=referer))
         
         self.sleep(wait)
         
@@ -570,14 +555,14 @@ class DriverBase():
         return self.select(selector, wait)
 
     def get_element_containing_text(
-        self, text: str, type: Optional[str] = None, wait: Optional[int] = Wait.SHORT
+        self, text: str, wait: Optional[int] = Wait.SHORT, type: Optional[str] = None, 
     ) -> Element:
         elem_coro = self._tab.find(text, type=type, timeout=wait)
         elem = self._run(elem_coro)
         return make_element(self, self._tab, elem) if elem else None
 
     def get_all_elements_containing_text(
-        self, text: str, type: Optional[str] = None, wait: Optional[int] = Wait.SHORT
+        self, text: str, wait: Optional[int] = Wait.SHORT, type: Optional[str] = None, 
     ) -> List[Element]:
         elems_coro = self._tab.find_all(text, type=type, timeout=wait)
         elems = self._run(elems_coro)
@@ -585,14 +570,14 @@ class DriverBase():
 
 
     def get_element_with_exact_text(
-        self, text: str, type: Optional[str] = None, wait: Optional[int] = Wait.SHORT
+        self, text: str,  wait: Optional[int] = Wait.SHORT,type: Optional[str] = None,
     ) -> Element:
         elem_coro = self._tab.find(text, type=type, timeout=wait, exact_match=True)
         elem = self._run(elem_coro)
         return make_element(self, self._tab, elem) if elem else None
 
     def get_all_elements_with_exact_text(
-        self, text: str, type: Optional[str] = None, wait: Optional[int] = Wait.SHORT, 
+        self, text: str,  wait: Optional[int] = Wait.SHORT, type: Optional[str] = None,
     ) -> List[Element]:
         elems_coro = self._tab.find_all(text, type=type, timeout=wait, exact_match=True)
         elems = self._run(elems_coro)

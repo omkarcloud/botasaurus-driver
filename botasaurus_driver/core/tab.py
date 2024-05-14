@@ -5,7 +5,7 @@ import typing
 from datetime import datetime
 from typing import List, Union, Optional
 
-from ..exceptions import ElementWithSelectorNotFoundException, JavascriptException, ProtocolException, InvalidFilenameException, JavascriptSyntaxException, ScreenshotException
+from ..exceptions import ElementWithSelectorNotFoundException, DriverException, JavascriptException, ProtocolException, InvalidFilenameException, JavascriptSyntaxException, ScreenshotException
 from ..driver_utils import create_screenshot_filename, get_download_directory, get_download_filename
 
 from . import element
@@ -399,7 +399,8 @@ class Tab(Connection):
             if _node.node_name == "IFRAME":
                 doc = _node.content_document
         node_id = None
-
+        if not doc:
+            raise DriverException("Failed to find Document")
         try:
             node_id = await self.send(cdp.dom.query_selector(doc.node_id, selector))
 
