@@ -906,13 +906,22 @@ class DriverBase():
 
     def wait_for_page_to_be(self, expected_url: Union[str, List[str]], wait: Optional[int] = 8, raise_exception: bool = True) -> bool:
         def check_page(driver, expected_url):
-            if isinstance(expected_url, str):
-                return expected_url == driver.current_url
+            if expected_url.startswith('https://') or expected_url.startswith('http://'):
+                if isinstance(expected_url, str):
+                    return expected_url == driver.current_url
+                else:
+                    for url in expected_url:
+                        if url == driver.current_url:
+                            return True
+                return False
             else:
-                for url in expected_url:
-                    if url == driver.current_url:
-                        return True
-            return False
+                if isinstance(expected_url, str):
+                    return expected_url in driver.current_url
+                else:
+                    for x in expected_url:
+                        if x in driver.current_url:
+                            return True
+                    return False
 
         if wait is None:
             if check_page(self, expected_url):

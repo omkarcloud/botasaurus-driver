@@ -24,3 +24,4 @@ is_gitpod_environment = 'GITPOD_WORKSPACE_ID' in environ
 
 is_vmish = is_docker or is_vm or is_gitpod_environment
 
+is_google_colab = 'COLAB_GPU' in environ

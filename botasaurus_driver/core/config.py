@@ -2,7 +2,7 @@ import tempfile
 import os
 import sys
 from ..driver_utils import convert_to_absolute_profile_path
-from .env import is_vmish, is_docker
+from .env import is_vmish, is_docker, is_google_colab
 from ..exceptions import DriverException
 
 
@@ -189,6 +189,8 @@ class Config:
         self.is_retry = False
         self.is_last_retry = False
 
+        self._display = None
+
         add_essential_options(self, self.profile, self.window_size, self.user_agent)
 
         # other keyword args will be accessible by attribute
@@ -232,7 +234,8 @@ class Config:
     def close(self):
         if self.local_proxy:
             close_local_proxy(self.local_proxy)
-
+        if self._display:
+            self._display.stop()
 
     def __getattr__(self, item):
         if item not in self.__dict__:
@@ -244,10 +247,25 @@ class Config:
 
         if self.arguments:
             args.extend(self.arguments)
-        
-        if self.headless or should_force_headless():
-            args.append("--headless=new")
 
+        if is_google_colab:
+            # TODO: remove it when moved to syncronous driver
+            import nest_asyncio
+            nest_asyncio.apply()
+
+        if self.headless:
+            args.append("--headless=new")
+        else: 
+            if is_vmish:
+                from pyvirtualdisplay import Display
+                
+                try:
+                  self._display = Display(visible=False, size=(1920, 1080))
+                  self._display.start()
+                except FileNotFoundError:
+                  print('To run in headfull mode, You need to install Xvfb. Please run "sudo apt-get install xvfb" in your terminal. (We are currently running in headless mode)')
+                  args.append("--headless=new")
+                
         if should_force_no_sandbox():
             args.append("--no-sandbox")
 
