@@ -9,6 +9,8 @@ def get_subfolders(parent_folder="bota"):
     """
     temp_dir = tempfile.gettempdir()
     parent_path = os.path.join(temp_dir, parent_folder)
+    if not os.path.exists(parent_path):
+        return []
     subfolders = [folder for folder in os.listdir(parent_path)]
     return subfolders
 
