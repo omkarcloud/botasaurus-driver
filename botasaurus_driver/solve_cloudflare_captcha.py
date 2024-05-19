@@ -127,7 +127,6 @@ def bypass_if_detected(driver, raise_exception=True):
                 print("Cloudflare has not given us a captcha. Exiting ...")
 
                 if raise_exception:
-                    input("Press Enter to continue ...")
                     raise CloudflareDetectionException()
 
                 return wait_till_document_is_ready(driver._tab, driver.config.wait_for_complete_page_load)
