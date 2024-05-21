@@ -3,7 +3,7 @@
 Botasaurus Driver is a powerful Driver Automation Python library that offers the following benefits:
 
 
-- It is really humanane; it looks and works exactly like a real browser, allowing it to access any website.
+- It is really humane; it looks and works exactly like a real browser, allowing it to access any website.
 - Compared to Selenium and Playwright, it is super fast to launch and use.
 - The API is designed by and for web scrapers, and you will love it.
 

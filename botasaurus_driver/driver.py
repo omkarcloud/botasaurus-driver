@@ -420,7 +420,7 @@ def block_if_should(driver):
             driver.block_images_and_css()
         elif driver.config.block_images:
             driver.block_images()
-
+_user_agent = None 
 class DriverBase():
     def __init__(self, config,_tab_value, _loop, _browser):
             self.config = config
@@ -448,6 +448,12 @@ class DriverBase():
     def current_url(self):
         return self.run_js("return window.location.href")
 
+    @property
+    def user_agent(self):
+        global _user_agent      
+        if not _user_agent:
+            _user_agent= self.run_js("return navigator.userAgent")
+        return _user_agent
 
     @property
     def title(self):
