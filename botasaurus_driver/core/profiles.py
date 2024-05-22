@@ -35,8 +35,8 @@ def is_chrome_running_on_ports(ports):
     running_ports = set()
     for proc in psutil.process_iter(['name', 'cmdline']):
         try:
-            if 'chrome' in proc.info['name'].lower():
-                cmdline = proc.info['cmdline']
+            cmdline = proc.info['cmdline']
+            if 'chrome' in proc.info['name'].lower() and cmdline is not None:
                 for port in ports:
                     if any(f'--remote-debugging-port={port}' in arg for arg in cmdline):
                         running_ports.add(port)
