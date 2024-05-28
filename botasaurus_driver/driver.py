@@ -141,6 +141,11 @@ class Element:
     def href(self):
         return  self._elem.attrs.get("href")
 
+    def get_attribute(
+        self, attribute: str
+    ) -> str:
+        return self.attributes.get(attribute)
+
     def select(self, selector: str, wait: Optional[int] = Wait.SHORT) -> "Element":
         elem_coro = self._elem.query_selector(selector, wait)
         elem = self._tab._run(elem_coro)
