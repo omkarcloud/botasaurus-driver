@@ -156,7 +156,7 @@ class Config:
 
         self.extensions=extensions
 
-        self.arguments=arguments
+        self.arguments= arguments if arguments else []
 
         self.user_agent=user_agent
         self.window_size=window_size
@@ -176,7 +176,6 @@ class Config:
             self.is_temporary_profile = False
 
 
-        self.arguments = arguments
 
         self.browser_executable_path = find_chrome_executable()
 

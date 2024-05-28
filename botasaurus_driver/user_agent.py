@@ -1,5 +1,6 @@
 from .base_data import BaseData
-from random import choice
+from sys import platform
+from os import name
 
 common_agents = [
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
@@ -11,19 +12,15 @@ common_agents = [
         ]
 
 def get_correct_agent(windows, mac, linux):
-    # if is_windows():
-    #     return windows
-    
-    return choice(
-        common_agents
-    )
-    # Temporary Fix for Ubuntu System's
-    # return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    is_windows =  name == 'nt'
+    is_mac =  platform == "darwin"
 
-    # elif is_mac():
-    #     return mac
-    # else:
-    #     return linux
+    if is_windows:
+        return windows
+    elif is_mac:
+        return mac
+    else:
+        return linux
 
 
 class UserAgent(BaseData):
