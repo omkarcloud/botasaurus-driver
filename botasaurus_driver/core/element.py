@@ -686,7 +686,7 @@ return JSON.stringify({ "x": resp });
         text_nodes = util.filter_recurse_all(self.node, lambda n: n.node_type == 3)
         return " ".join([n.node_value for n in text_nodes])
 
-    async def query_selector_all(self, selector: str, timeout, node_name):
+    async def query_selector_all(self, selector: str, timeout, node_name=None):
         """
         like js querySelectorAll()
         """
