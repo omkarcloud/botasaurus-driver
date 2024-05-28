@@ -49,7 +49,7 @@ class DOMNode:
     option_selected: typing.Optional[bool] = None
 
     #: The indexes of the node's child nodes in the ``domNodes`` array returned by ``getSnapshot``, if
-    #: any.
+    #: Any.
     child_node_indexes: typing.Optional[typing.List[int]] = None
 
     #: Attributes of an ``Element`` node.

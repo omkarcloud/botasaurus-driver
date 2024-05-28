@@ -387,17 +387,18 @@ class Browser:
         for _ in range(3):
             try:
                 # print("killing browser")
-                kill_process(self._process_pid)
+                self._process.terminate()
+
                 # print("killed browser")            
                 break
             except (Exception,):
                 try:
-                    kill_process(self._process_pid)
+                    self._process.kill()
                     break
                 except (Exception,):
                     try:
                         if hasattr(self, "browser_process_pid"):
-                            os.kill(self._process_pid, 15)
+                            kill_process(self._process_pid)
                             break
                     except (TypeError,):
                         pass

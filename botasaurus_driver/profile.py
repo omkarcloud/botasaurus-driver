@@ -2,42 +2,19 @@ from datetime import datetime
 import json
 import os
 import random as random_module
-
 from .driver_utils import relative_path
 
 datetime_format = '%Y-%m-%d %H:%M:%S'
 
+from typing import Any, overload
+
 def str_to_datetime(when):
-    return datetime.strptime(
-        when, datetime_format)
+    return datetime.fromisoformat(when)
 
 def datetime_to_str(when):
-    return when.strftime(datetime_format)
+    return when.isoformat()
 
-class ProfilePyStorageException(Exception):
-    pass
-
-
-class BasicStorageBackend:
-    def raise_dummy_exception(self):
-        raise ProfilePyStorageException("Called dummy backend!")
-
-    def get_item(self, item: str, default: any = None) -> str:
-        self.raise_dummy_exception()
-
-    def set_item(self, item: str, value: any) -> None:
-        self.raise_dummy_exception()
-
-    def remove_item(self, item: str) -> None:
-        self.raise_dummy_exception()
-
-    def clear(self) -> None:
-        self.raise_dummy_exception()
-
-
-class JSONStorageBackend(BasicStorageBackend):
-    def __init__(self) -> None:
-        self.refresh()
+class JSONStorageBackend():
 
     def refresh(self):
         self.json_path = relative_path("profiles.json", 0)
@@ -61,13 +38,13 @@ class JSONStorageBackend(BasicStorageBackend):
     def items(self):
         return self.json_data
 
-    def set_item(self, key: str, value: any) -> None:
+    def set_item(self, key: str, value: Any) -> None:
         if "created_at" not in value:
             value["created_at"] = datetime_to_str(datetime.now())
 
         value["updated_at"] = datetime_to_str(datetime.now())
-
-        self.json_data[key] = value
+         
+        self.json_data[key] = {'profile_id': key, **value}
         self.commit_to_disk()
 
     def remove_item(self, key: str) -> None:
@@ -82,50 +59,67 @@ class JSONStorageBackend(BasicStorageBackend):
         self.commit_to_disk()
 
 
-class Profile:
-    def __init__(self, profile) -> None:
-        self.storage_backend_instance = JSONStorageBackend()
+    
+class Profile(dict):
+
+    def __init__(self, profile:str) -> None:
+        self.refresh_profiles()
         self.profile = profile
+        super().__init__({ 'profile_id': self.profile, **self.json_data.get(profile, {})})
 
-    def _refresh(self) -> None:
-        self.storage_backend_instance.refresh()
+    def refresh_profiles(self):
+        self.json_path = relative_path("profiles.json", 0)
+        self.json_data = {}
 
-    def get_item(self, item: str, default=None) -> any:
-        profile = self.storage_backend_instance.get_item(self.profile, {})
+        if not os.path.isfile(self.json_path):
+            with open(self.json_path, "w") as json_file:
+                json.dump(self.json_data, json_file, indent=4)
 
-        if default is None:
-            return profile.get(item)
-        else:
-            return profile.get(item, default)
+        with open(self.json_path, "r") as json_file:
+            self.json_data = json.load(json_file)
 
-    def set_item(self, item: str, value: any) -> None:
-        profile = self.storage_backend_instance.get_item(self.profile, {})
-        profile[item] = value
+    def commit_to_disk(self):
+        self.json_data[self.profile] = { 'profile_id': self.profile, **self}
+        with open(self.json_path, "w") as json_file:
+            json.dump(self.json_data, json_file, indent=4)
 
-        self.storage_backend_instance.set_item(self.profile, profile)
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
 
-    def remove_item(self, item: str) -> None:
-        profile = self.storage_backend_instance.get_item(self.profile, {})
-        del profile[item]
+        if "created_at" not in self:
+            super().__setitem__("created_at", datetime_to_str(datetime.now()))
 
-        self.storage_backend_instance.set_item(self.profile, profile)
+        super().__setitem__("updated_at", datetime_to_str(datetime.now()))
+        self.refresh_profiles()
+        self.commit_to_disk()
 
-    def clear(self):
+    def __delitem__(self, key):
+        super().__delitem__(key)
+        self.refresh_profiles()
+        self.commit_to_disk()
 
-        self.storage_backend_instance.remove_item(self.profile)
+    @overload
+    def pop(self, key: str, default: Any): ...
 
-    def items(self):
-        profile = self.storage_backend_instance.get_item(self.profile, {})
-        return profile
+    def pop(self, key, *args):
+        result =  super().pop(key, *args)
+        self.refresh_profiles()
+        self.commit_to_disk()
+        return result
 
-    def get_profile(self, profile):
-        if profile is None:
-            raise Exception("No Profile Passed.")
 
-        return self.storage_backend_instance.get_item(profile)
+class Profiles:
+    storage_backend_instance = JSONStorageBackend()
 
-    def get_profiles(self, random=False):
-        data = list(self.storage_backend_instance.items().values())
+    @staticmethod
+    def get_profile(profile):
+        Profiles.storage_backend_instance.refresh()
+        return Profiles.storage_backend_instance.get_item(profile)
+
+    @staticmethod
+    def get_profiles(random=False):
+        Profiles.storage_backend_instance.refresh()
+        data = list(Profiles.storage_backend_instance.items().values())
 
         if len(data) == 0:
             return data
@@ -141,3 +135,13 @@ class Profile:
             data = sorted(data, key=lambda x: str_to_datetime(x["created_at"]))
 
         return data
+
+    @staticmethod
+    def set_profile(profile, data):
+        Profiles.storage_backend_instance.refresh()
+        Profiles.storage_backend_instance.set_item(profile, data)
+
+    @staticmethod
+    def delete_profile(profile):
+        Profiles.storage_backend_instance.refresh()
+        Profiles.storage_backend_instance.remove_item(profile)

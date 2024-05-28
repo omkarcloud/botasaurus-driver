@@ -19,7 +19,7 @@ from .driver_utils import (
     sleep_for_n_seconds,
     sleep_forever,
 )
-from .exceptions import CheckboxElementForLabelNotFoundException, ElementWithTextNotFoundException, IframeNotFoundException, InputElementForLabelNotFoundException, NoProfileException,  PageNotFoundException
+from .exceptions import CheckboxElementForLabelNotFoundException, ElementWithTextNotFoundException, IframeNotFoundException, InputElementForLabelNotFoundException, InvalidProfileException, NoProfileException,  PageNotFoundException
 from .local_storage_driver import LocalStorage
 from .opponent import Opponent
 from .solve_cloudflare_captcha import bypass_if_detected,  wait_till_document_is_ready
@@ -476,11 +476,23 @@ class DriverBase():
     @property
     def profile(self):
         from .profile import Profile
-        if self.config.profile:
-            return Profile(self.config.profile)
-        else: 
+        if not self.config.profile:
             raise NoProfileException()
-    
+        return Profile(self.config.profile)
+
+    @profile.setter
+    def profile(self, value):
+        from .profile import Profiles
+        if not self.config.profile:
+            raise NoProfileException()
+
+        if value is None:
+            Profiles.delete_profile(self.config.profile)
+        elif isinstance(value, dict):
+            Profiles.set_profile(self.config.profile, value)
+        else:
+            raise InvalidProfileException()
+      
     def _update_targets(self):
         return self._run(self._browser.update_targets())
 

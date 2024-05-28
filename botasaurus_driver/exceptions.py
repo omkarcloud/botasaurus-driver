@@ -26,6 +26,9 @@ class NoProfileException(DriverException):
     def init(self):
         super().init(f"No profile provided.")
 
+class InvalidProfileException(DriverException):
+    def init(self):
+        super().init(f"Invalid profile format. Profile must be a dictionary or None.")
 class ElementWithTextNotFoundException(DriverException):
     def __init__(self, text):
         super().__init__(f"Cannot find element containing text: '{text}'.")
