@@ -924,7 +924,7 @@ class DriverBase():
     def is_in_page(
         self, target: str
     ) -> bool:
-        return self.wait_for_page_to_be(target, None, raise_exception=False)
+        return self.wait_for_page_to_be(target, wait=None, raise_exception=False)
         
 
     def wait_for_page_to_be(self, expected_url: Union[str, List[str]], wait: Optional[int] = 8, raise_exception: bool = True) -> bool:
