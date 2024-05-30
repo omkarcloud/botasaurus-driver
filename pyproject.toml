@@ -35,8 +35,7 @@ classifiers = [  # Optional
 ]
 
 dependencies = [
-      "websockets>=11",
-      "deprecated",
+      "websocket-client>=1.8.0",
       "botasaurus-proxy-authentication",
       "psutil",
       "pyvirtualdisplay"
@@ -56,14 +55,3 @@ packages = ["botasaurus_driver"]
 [build-system]
 requires = ["setuptools>=43.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
-
-[project.optional-dependencies]
-dev = [
-    "black",
-    "build",
-    "sphinx",
-    "sphinx_markdown_builder",
-    "sphinx_autodoc_typehints",
-    "furo",
-    "pygments",
-]

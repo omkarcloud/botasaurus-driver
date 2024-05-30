@@ -1,5 +1,4 @@
 from random import uniform
-import asyncio
 from datetime import datetime
 from time import sleep
 import time
@@ -67,11 +66,8 @@ def get_iframe_tab(driver, internal_elem):
         time.sleep(0.1)
         # time.sleep(2)
 
-def add_loop_to_tab(value, loop):
-    value.loop = loop
 
 def wait_for_iframe_tab_load(driver, iframe_tab):
-    add_loop_to_tab(iframe_tab, driver._loop)
     iframe_tab.websocket_url = iframe_tab.websocket_url.replace("iframe", "page")
     # wait_till_document_is_ready(iframe_tab, True)
 
@@ -79,7 +75,7 @@ def create_iframe_element(driver, internal_elem):
     iframe_tab = get_iframe_tab(driver, internal_elem)
     wait_for_iframe_tab_load(driver, iframe_tab)
     
-    return IframeElement(driver.config, iframe_tab, driver._loop, driver._browser)
+    return IframeElement(driver.config, iframe_tab,driver._browser)
 
 def make_element(driver, current_tab, internal_elem):
     if not internal_elem:
@@ -427,15 +423,14 @@ def block_if_should(driver):
             driver.block_images()
 _user_agent = None 
 class DriverBase():
-    def __init__(self, config,_tab_value, _loop, _browser):
+    def __init__(self, config,_tab_value,_browser):
             self.config = config
             self._tab_value = _tab_value
-            self._loop = _loop
             self._browser = _browser
 
 
     def _run(self, coro):
-        return self._loop.run_until_complete(coro)
+        return coro
 
     @property
     def _tab(self) -> Tab:
@@ -446,7 +441,6 @@ class DriverBase():
 
     @_tab.setter
     def _tab(self, value: Tab):
-        add_loop_to_tab(value, self._loop)
         self._tab_value = value
 
     @property
@@ -1023,8 +1017,6 @@ class Driver(DriverBase):
         self.config = Config(headless=headless,proxy=proxy,profile=profile,tiny_profile=tiny_profile,block_images=block_images,block_images_and_css=block_images_and_css,wait_for_complete_page_load=wait_for_complete_page_load,extensions=extensions,arguments=arguments,user_agent=user_agent,window_size=window_size,lang=lang,beep=beep)
         self._tab_value: Tab = None
 
-        self._loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self._loop)
         self._browser: Browser = self._run(start(self.config))
     
         block_if_should(self)
@@ -1032,7 +1024,7 @@ class Driver(DriverBase):
         if self.config.tiny_profile:
             load_cookies(self, self.config.profile)        
      
-        super().__init__(self.config, self._tab_value, self._loop, self._browser)
+        super().__init__(self.config, self._tab_value, self._browser)
 
     def block_urls(self, urls) -> None:
         # You usually don't need to close it because we automatically close it when script is cancelled (ctrl + c) or completed 
@@ -1048,6 +1040,5 @@ class Driver(DriverBase):
     def close(self) -> None:
         if self.config.tiny_profile:
             save_cookies(self, self.config.profile)        
-
         # You usually don't need to close it because we automatically close it when script is cancelled (ctrl + c) or completed 
         self._browser.close()

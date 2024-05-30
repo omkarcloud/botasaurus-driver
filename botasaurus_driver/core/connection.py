@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import asyncio
 import collections
 import itertools
 import json
 import sys
-from asyncio import iscoroutine, iscoroutinefunction
+import threading
+import time
 from typing import (
     Generator,
     Union,
@@ -13,9 +13,10 @@ from typing import (
     TypeVar,
 )
 
-import websockets
+import websocket
+from queue import Queue, Empty
+from ..exceptions import ChromeException
 
-from ..exceptions import  ProtocolException
 
 from . import util
 from .. import cdp
@@ -32,140 +33,60 @@ TargetType = Union[cdp.target.TargetInfo, cdp.target.TargetID]
 class SettingClassVarNotAllowedException(PermissionError):
     pass
 
-
-class Transaction(asyncio.Future):
-    __cdp_obj__: Generator = None
-
-    method: str = None
-    params: dict = None
-
-    id: int = None
-
-    def __init__(self, cdp_obj: Generator):
-        """
-        :param cdp_obj:
-        """
-        super().__init__()
-        self.__cdp_obj__ = cdp_obj
-        self.connection = None
-
-        self.method, *params = next(self.__cdp_obj__).values()
+def make_request_body(id, cdp_obj):
+        method, *params = next(cdp_obj).values()
         if params:
             params = params.pop()
-        self.params = params
+        return json.dumps({"method": method, "params": params, "id": id})
 
-    @property
-    def message(self):
-        return json.dumps({"method": self.method, "params": self.params, "id": self.id})
-
-    @property
-    def has_exception(self):
-        try:
-            if self.exception():
-                return True
-        except:  # noqa
-            return True
-        return False
-
-    def __call__(self, **response: dict):
-        """
-        parsed the response message and marks the future
-        complete
-
-        :param response:
-        :return:
-        """
-
+def parse_response(response, cdp_obj):
         if "error" in response:
             # set exception and bail out
-            return self.set_exception(ProtocolException(response["error"]))
+            raise ChromeException(response["error"])
         try:
             # try to parse the result according to the py cdp docs.
-            self.__cdp_obj__.send(response["result"])
+            return cdp_obj.send(response["result"])
         except StopIteration as e:
             # exception value holds the parsed response
-            return self.set_result(e.value)
-        raise ProtocolException("could not parse the cdp response:\n%s" % response)
+            return e.value
+        raise ChromeException("could not parse the cdp response:\n%s" % response)
 
-    def __repr__(self):
-        success = False if (self.done() and self.has_exception) else True
-        if self.done():
-            status = "finished"
-        else:
-            status = "pending"
-        fmt = (
-            f"<{self.__class__.__name__}\n\t"
-            f"method: {self.method}\n\t"
-            f"status: {status}\n\t"
-            f"success: {success}>"
-        )
-        return fmt
+def wait_till_response_arrives(q: Queue, response_id, timeout):
+            start_time = time.time()
 
+            while True:
+                try:
+                    message = q.get(timeout=timeout)
+                    if message['id'] == response_id:
+                        return message
+                except Empty:
+                    raise TimeoutError("Response not received")
 
-class EventTransaction(Transaction):
-    event = None
-    value = None
+                # If the timeout has been exceeded, raise an exception
+                if time.time() - start_time > timeout:
+                    raise TimeoutError("Response not received")
 
-    def __init__(self, event_object):
-        try:
-            super().__init__(None)
-        except:
-            pass
-        self.set_result(event_object)
-        self.event = self.value = self.result()
+                # # Wait for a short period before checking again
+                # time.sleep(0.1)
 
-    def __repr__(self):
-        status = "finished"
-        success = False if self.exception() else True
-        event_object = self.result()
-        fmt = (
-            f"{self.__class__.__name__}\n\t"
-            f"event: {event_object.__class__.__module__}.{event_object.__class__.__name__}\n\t"
-            f"status: {status}\n\t"
-            f"success: {success}>"
-        )
-        return fmt
-
-
-class CantTouchThis(type):
-    def __setattr__(cls, attr, value):
-        """
-        :meta private:
-        """
-        if attr == "__annotations__":
-            # fix autodoc
-            return super().__setattr__(attr, value)
-        raise SettingClassVarNotAllowedException(
-            "\n".join(
-                (
-                    "don't set '%s' on the %s class directly, as those are shared with other objects.",
-                    "use `my_object.%s = %s`  instead",
-                )
-            )
-            % (attr, cls.__name__, attr, value)
-        )
-
-
-class Connection(metaclass=CantTouchThis):
+class Connection:
     attached: bool = None
-    websocket: websockets.WebSocketClientProtocol
+    websocket: websocket.WebSocketApp
     _target: cdp.target.TargetInfo
 
     def __init__(
         self,
         websocket_url: str,
         target: cdp.target.TargetInfo = None,
-        _owner = None,
+        _owner=None,
         **kwargs,
     ):
-        super().__init__()
         self._target = target
         self.__count__ = itertools.count(0)
         self._owner = _owner
-
+        self.queue = Queue()
         self.websocket_url: str = websocket_url
         self.websocket = None
-        self.mapper = {}
         self.handlers = collections.defaultdict(list)
         self.recv_task = None
         self.enabled_domains = []
@@ -191,52 +112,57 @@ class Connection(metaclass=CantTouchThis):
     def closed(self):
         if not self.websocket:
             return True
-        return self.websocket.closed
+        return False
 
-    async def aopen(self, **kw):
+    def open(self, **kw):
         """
         opens the websocket connection. should not be called manually by users
         :param kw:
         :return:
         """
 
-        if not self.websocket or self.websocket.closed:
+        # if not self.websocket or self.websocket.closed:
+        if not self.websocket :
             try:
-                self.websocket = await websockets.connect(
-                    self.websocket_url,
-                    ping_timeout=PING_TIMEOUT,
-                    max_size=MAX_SIZE,
-                )
+                self.websocket = websocket.WebSocketApp(self.websocket_url)
                 self.listener = Listener(self)
+                self.listener.connected_event.wait()
             except (Exception,) as e:
                 if self.listener:
-                    self.listener.cancel()
+                    self.listener.cancel_event.set()
                 raise
         if not self.listener or not self.listener.running:
             self.listener = Listener(self)
+            self.listener.connected_event.wait()
 
         # when a websocket connection is closed (either by error or on purpose)
         # and reconnected, the registered event listeners (if any), should be
         # registered again, so the browser sends those events
 
-        await self._register_handlers()
+        self._register_handlers()
 
-    async def aclose(self):
+    def close(self):
         """
         closes the websocket connection. should not be called manually by users.
         """
+        self.close_connections()
 
-        if self.websocket and not self.websocket.closed:
-            if self.listener and self.listener.running:
-                self.listener.cancel()
+    def close_connections(self):
+        if self.listener:
+                self.listener.cancel_event.set()
                 self.enabled_domains.clear()
-            await self.websocket.close()
+                self.listener = None
+            
+        if self.websocket:
+            self.websocket.close()
+            self.websocket = None
+        
 
-    async def sleep(self, t: Union[int, float] = 0.25):
-        await self.update_target()
-        await asyncio.sleep(t)
+    def sleep(self, t: Union[int, float] = 0.25):
+        self.update_target()
+        time.sleep(t)
 
-    async def wait(self, t: Union[int, float] = None):
+    def wait_to_be_idle(self, t: Union[int, float] = None):
         """
         waits until the event listener
         reports idle (which is when no new events had been received in .5 seconds
@@ -247,12 +173,11 @@ class Connection(metaclass=CantTouchThis):
         :return:
         :rtype:
         """
-        await self.update_target()
+        self.update_target()
 
         try:
-
-            await asyncio.wait_for(self.listener.idle.wait(), timeout=t)
-        except asyncio.TimeoutError:
+            self.listener.idle.wait(timeout=t)
+        except TimeoutError:
             if t is not None:
                 # explicit time is given, which is now passed
                 # so bail out early
@@ -261,41 +186,32 @@ class Connection(metaclass=CantTouchThis):
             # no listener created yet
             pass
         if t is not None:
-            await self.sleep(t)
+            self.sleep(t)
 
-    def __getattr__(self, item):
-        """:meta private:"""
-        try:
-            return getattr(self.target, item)
-        except AttributeError:
-            raise
+    # def __getattr__(self, item):
+    #     """:meta private:"""
+    #     try:
+    #         return getattr(self.target, item)
+    #     except AttributeError:
+    #         raise
 
-    async def __aenter__(self):
+    def __enter__(self):
         """:meta private:"""
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_val, exc_tb):
         """:meta private:"""
-        await self.aclose()
+        self.close()
         if exc_type and exc_val:
             raise exc_type(exc_val)
 
-    def __await__(self):
-        """
-        updates targets and wait for event listener to report idle.
-        idle is reported when no new events are received for the duration of 1 second
-        :return:
-        :rtype:
-        """
-        return self.wait().__await__()
-
-    async def update_target(self):
-        target_info: cdp.target.TargetInfo = await self.send(
-            cdp.target.get_target_info(self.target_id), _is_update=True
+    def update_target(self):
+        target_info: cdp.target.TargetInfo = self.send(
+            cdp.target.get_target_info(self.target.target_id), _is_update=True
         )
         self.target = target_info
 
-    async def send(
+    def send(
         self, cdp_obj: Generator[dict[str, Any], dict[str, Any], Any], _is_update=False
     ) -> Any:
         """
@@ -309,39 +225,32 @@ class Connection(metaclass=CantTouchThis):
             when multiple calls to connection.send() are made
         :return:
         """
-        await self.aopen()
+        self.open()
         if not self.websocket or self.closed:
             return
         if not self.listener or not self.listener.running:
             self.listener = Listener(self)
+
+        
+        tx_id = next(self.__count__)
+        tx  = make_request_body(id=tx_id, cdp_obj = cdp_obj)
+        if not _is_update:
+            self._register_handlers()
         try:
-            tx = Transaction(cdp_obj)
-            tx.connection = self
-            if not self.mapper:
-                self.__count__ = itertools.count(0)
-            tx.id = next(self.__count__)
-            self.mapper.update({tx.id: tx})
+          self.websocket.send(tx)
 
-            if not _is_update:
-                await self._register_handlers()
-            
-            maxtmt = 180
-            await asyncio.wait_for(self.websocket.send(tx.message), timeout=maxtmt)
-            try:
-                try:
-                  u =  await asyncio.wait_for(tx, timeout=maxtmt)
-                except asyncio.TimeoutError as e:
-                  raise e
+        # except (exceptions.ConnectionClosed,exceptions.ConnectionClosedError, ConnectionResetError):
+        except Exception as e:
+        #   print('faced websocket send exception', e)
+          raise           
+        
+        
+        result =   wait_till_response_arrives(self.queue, tx_id , 40)
+        result = parse_response(result, cdp_obj)
 
-                return u
-            except ProtocolException as e:
-                e.message += f"\ncommand:{tx.method}\nparams:{tx.params}"
-                raise e
+        return result
 
-        except Exception:
-            await self.aclose()
-
-    async def _register_handlers(self):
+    def _register_handlers(self):
         """
         ensure that for current (event) handlers, the corresponding
         domain is enabled in the protocol.
@@ -378,7 +287,7 @@ class Connection(metaclass=CantTouchThis):
                     # loop indefinite
                     self.enabled_domains.append(domain_mod)
 
-                    await self.send(domain_mod.enable(), _is_update=True)
+                    self.send(domain_mod.enable(), _is_update=True)
 
                 except:  # noqa - as broad as possible, we don't want an error before the "actual" request is sent
                     try:
@@ -398,9 +307,7 @@ class Connection(metaclass=CantTouchThis):
 class Listener:
     def __init__(self, connection: Connection):
         self.connection = connection
-        self.history = collections.deque()
-        self.max_history = 1000
-        self.task: asyncio.Future = None
+        self.task: threading.Thread = None
 
         # when in interactive mode, the loop is paused after each return
         # and when the next call is made, it might still have to process some events
@@ -415,12 +322,15 @@ class Listener:
         # /example/demo.py runs ~ 5 seconds faster, which is quite a lot.
 
         is_interactive = getattr(sys, "ps1", sys.flags.interactive)
+        self.cancel_event = threading.Event()  # Event for cancellation
+        self.connected_event = threading.Event()  # Event for cancellation
         self._time_before_considered_idle = 0.10 if not is_interactive else 0.75
-        self.idle = asyncio.Event()
+        self.idle = threading.Event()
         self.run()
 
     def run(self):
-        self.task = asyncio.create_task(self.listener_loop())
+        self.task = threading.Thread(target=self.listener_loop, daemon=True)
+        self.task.start()
 
     @property
     def time_before_considered_idle(self):
@@ -430,97 +340,67 @@ class Listener:
     def time_before_considered_idle(self, seconds: Union[int, float]):
         self._time_before_considered_idle = seconds
 
-    def cancel(self):
-        if self.task and not self.task.cancelled():
-            self.task.cancel()
 
     @property
     def running(self):
         if not self.task:
             return False
-        if self.task.done():
+        if not self.task.is_alive():
             return False
         return True
 
-    async def listener_loop(self):
+    def listener_loop(self):
+        while not self.cancel_event.is_set():
+            ws = self.connection.websocket
+            def on_message(ws, message):
+                message = json.loads(message)
+                if "id" in message:
+                    # pass
+                    self.connection.queue.put(message)
+                else:
+                    try:
+                        event = cdp.util.parse_json_event(message)
+                    except KeyError as e:
+                        return
+                    except Exception as e:
+                        return
+                    try:
+                        if type(event) in self.connection.handlers:
+                            callbacks = self.connection.handlers[type(event)]
+                        else:
+                            return
 
-        while True:
-            try:
-                msg = await asyncio.wait_for(
-                    self.connection.websocket.recv(), self.time_before_considered_idle
-                )
-            except asyncio.TimeoutError:
-                self.idle.set()
-                # breathe
-                await asyncio.sleep(self.time_before_considered_idle / 10)
-                continue
-            except (Exception,):
-                # break on any other exception
-                # which is mostly socket is closed or does not exist
-                # or is not allowed
-                break
+                        if not len(callbacks):
+                            return
 
-            # async for msg in self.connection.websocket:
-            if not self.running:
-                break
-            self.idle.clear()
-            message = json.loads(msg)
-            if "id" in message:
-                # response to our command
-                if message["id"] in self.connection.mapper:
-                    tx = self.connection.mapper[message["id"]]
-                    tx(**message)
-            else:
-                # probably an event
-                try:
-                    event = cdp.util.parse_json_event(message)
-                    # self.history.append(event)
-                    event_tx = EventTransaction(event)
-                    # getattr(globals(), event.__class__.__module__)
-                    if not self.connection.mapper:
-                        self.connection.__count__ = itertools.count(0)
-                    event_tx.id = next(self.connection.__count__)
-                    self.connection.mapper[event_tx.id] = event_tx
-                    # while len(self.connection.mapper) > self.max_history:
-                    #     for k,v in self.connection.mapper.copy().items():
-                    #         # only remove old events
-                    #         if type(v) is not Transaction:
-                    #             self.connection.mapper.pop(k)
-
-                    # while len(self.history) >= self.max_history:
-                    #     self.history.popleft()
-                except Exception as e:
-                    continue
-                except KeyError as e:
-                    continue
-                try:
-                    if type(event) in self.connection.handlers:
-                        callbacks = self.connection.handlers[type(event)]
-                    else:
-                        continue
-
-                    if not len(callbacks):
-                        continue
-
-                    for callback in callbacks:
-                        try:
-                            if iscoroutinefunction(callback) or iscoroutine(callback):
-                                await callback(event)
-                            else:
+                        for callback in callbacks:
+                            try:
                                 callback(event)
+                            except Exception as e:
+                                raise
+                    except:
+                        return
+                    return
+                
+            def on_error(ws, error):
+                # print(f"Error: {error}")
+                pass
 
-                        except Exception as e:
-                       
-                            raise
-                except asyncio.CancelledError:
-                    break
-                except Exception:
-                    raise
-                continue
+            def on_close(ws, x, w):
+                # print("Connection closed")
+                pass
+            def on_open(ws):
+                self.connected_event.set()
 
+            ws.on_message = on_message
+            ws.on_error = on_error
+            ws.on_close = on_close
+            ws.on_open = on_open
+
+            ws.run_forever()
+            
     def __repr__(self):
         s_idle = "[idle]" if self.idle.is_set() else "[busy]"
-        s_cache_length = f"[cache size: {len(self.history)}]"
         s_running = f"[running: {self.running}]"
-        s = f"{self.__class__.__name__} {s_running} {s_idle} {s_cache_length}>"
+        s = f"{self.__class__.__name__} {s_running} {s_idle} >"
         return s

@@ -24,7 +24,7 @@ def get_remote_object_value(x):
                 raise JavascriptRuntimeException(x.description)
             return x.value
 
-async def start(
+def start(
     config: Optional[Config] = None,
     *,
     profile_directory: Optional[PathLike] = None,
@@ -71,7 +71,7 @@ async def start(
         )
 
     from .browser import Browser
-    return await Browser.create(config)
+    return Browser.create(config)
 
 
 def get_registered_instances():
@@ -80,7 +80,8 @@ def get_registered_instances():
 
 
 def deconstruct_browser():
-    for _ in __registered__instances__:
+    while __registered__instances__:
+        _ = __registered__instances__.pop()
         if not _.stopped:
             _.close()
 

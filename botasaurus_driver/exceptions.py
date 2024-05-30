@@ -19,16 +19,16 @@ class GoogleCookieConsentException(DriverException):
 
 class IframeNotFoundException(DriverException):
     def init(self, iframe_id):
-        super().init(f"Iframe {iframe_id} does not exist in the targets.")
+        super().__init__(f"Iframe {iframe_id} does not exist in the targets.")
 
 
 class NoProfileException(DriverException):
     def init(self):
-        super().init(f"No profile provided.")
+        super().__init__(f"No profile provided.")
 
 class InvalidProfileException(DriverException):
     def init(self):
-        super().init(f"Invalid profile format. Profile must be a dictionary or None.")
+        super().__init__(f"Invalid profile format. Profile must be a dictionary or None.")
 class ElementWithTextNotFoundException(DriverException):
     def __init__(self, text):
         super().__init__(f"Cannot find element containing text: '{text}'.")
@@ -92,7 +92,7 @@ class InvalidFilenameException(DriverException):
     def __init__(self, filename):
         super().__init__(f"Invalid filename: '{filename}'.")
 
-class ProtocolException(DriverException):
+class ChromeException(DriverException):
     def __init__(self, *args, **kwargs):  # real signature unknown
 
         self.message = None
@@ -124,7 +124,8 @@ class ProtocolException(DriverException):
     def __str__(self):
         return f"{self.message} [code: {self.code}]" if self.code else f"{self.message}"
 
-class JavascriptException(ProtocolException):
+
+class JavascriptException(ChromeException):
 
     def __init__(self, *args, **kwargs):  # real signature unknown
         

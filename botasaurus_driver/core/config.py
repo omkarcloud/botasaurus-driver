@@ -1,5 +1,7 @@
 import tempfile
 import os
+import gc
+import socket
 import sys
 from ..driver_utils import convert_to_absolute_profile_path
 from .env import is_vmish, is_docker, is_google_colab
@@ -35,18 +37,14 @@ is_posix = sys.platform.startswith(("darwin", "cygwin", "linux", "linux2"))
 PathLike = str
 AUTO = None
 
-
 def free_port() -> int:
-    """
-    Determines a free port using sockets.
-    """
-    import socket
-
-    free_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    free_socket.bind(("127.0.0.1", 0))
-    free_socket.listen(5)
-    port: int = free_socket.getsockname()[1]
-    free_socket.close()
+    """Get free port."""
+    sock = socket.socket()
+    sock.bind(('localhost', 0))
+    port = sock.getsockname()[1]
+    sock.close()
+    del sock
+    gc.collect()
     return port
 
 def clean_profile(profile):
@@ -246,11 +244,11 @@ class Config:
 
         if self.arguments:
             args.extend(self.arguments)
-
-        if is_google_colab:
-            # TODO: remove it when moved to syncronous driver
-            import nest_asyncio
-            nest_asyncio.apply()
+        # no need we are syncronous now
+        # if is_google_colab:
+        #     # TODO: remove it when moved to syncronous driver
+        #     import nest_asyncio
+        #     nest_asyncio.apply()
 
         if self.headless:
             args.append("--headless=new")
