@@ -4,7 +4,7 @@ import gc
 import socket
 import sys
 from ..driver_utils import convert_to_absolute_profile_path
-from .env import is_vmish, is_docker, is_google_colab
+from .env import is_vmish, is_docker
 from ..exceptions import DriverException
 
 
@@ -245,10 +245,6 @@ class Config:
         if self.arguments:
             args.extend(self.arguments)
         # no need we are syncronous now
-        # if is_google_colab:
-        #     # TODO: remove it when moved to syncronous driver
-        #     import nest_asyncio
-        #     nest_asyncio.apply()
 
         if self.headless:
             args.append("--headless=new")
