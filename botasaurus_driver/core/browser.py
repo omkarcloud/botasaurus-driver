@@ -49,7 +49,7 @@ def ensure_chrome_is_alive(url):
 
     raise Exception(f"Failed to connect to Chrome URL: {url}.")
 
-def wait_for_graceful_close(_process: subprocess.Popen):
+def wait_for_graceful_close(_process):
     retries = 10
     delay = 0.05
 
@@ -61,7 +61,7 @@ def wait_for_graceful_close(_process: subprocess.Popen):
     return _process.poll() is not None
 
 class Browser:
-    _process: subprocess.Popen
+    _process = None
     _process_pid: int
     _cookies: CookieJar = None
 
@@ -236,14 +236,13 @@ class Browser:
         self.config.port = self.config.port or free_port()
         exe = self.config.browser_executable_path
         params = self.config()
-        chrome_process = subprocess.Popen(
+
+        self._process = subprocess.Popen(
             [exe, *params],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             close_fds=is_posix,
         )
-
-        self._process = chrome_process
 
         self._process_pid = self._process.pid
 
@@ -342,17 +341,23 @@ class Browser:
         self.close_chrome()
         self.close_tab_connections()
         self.close_browser_connection()
-        if not wait_for_graceful_close(self._process):
+        _process = self._process
+        _process_pid = self._process_pid
+
+        self._process = None
+        self._process_pid = None
+
+        if not wait_for_graceful_close(_process):
         #   process not closed
             try:
-                self._process.terminate()
-                self._process.wait()
+                _process.terminate()
+                _process.wait()
             except (Exception,):
                 try:
-                    self._process.kill()
+                    _process.kill()
                 except (Exception,):
                     try:
-                        kill_process(self._process_pid)
+                        kill_process(_process_pid)
                     except (TypeError,):
                         pass
                     except (PermissionError,):
@@ -361,12 +366,14 @@ class Browser:
                         pass
                     except (Exception,):
                         raise
-        self._process = None
-        self._process_pid = None
 
+        _process.terminate()
         if self.config.is_temporary_profile:
             delete_profile(self.config.profile_directory)
         self.config.close()
+        del _process
+        instances = util.get_registered_instances()
+        instances.remove(self)        
 
     def close_browser_connection(self):
         try:
