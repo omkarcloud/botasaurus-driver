@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import os
 import types
 import typing
 from typing import Optional, List, Set, Union, Callable
@@ -18,6 +18,21 @@ from .. import cdp
 __registered__instances__: Set[Browser] = set()
 
 T = typing.TypeVar("T")
+# https://stackoverflow.com/questions/38518998/selenium-leaves-behind-running-processes
+def close_zombie_processes():
+    try:
+        pid = True
+        while pid:
+            pid = os.waitpid(-1, os.WNOHANG)
+            try:
+                if pid[0] == 0:
+                    pid = False
+            except:
+                pass
+
+    except ChildProcessError:
+        pass    
+
 
 def get_remote_object_value(x):
             if x.subtype=="error":

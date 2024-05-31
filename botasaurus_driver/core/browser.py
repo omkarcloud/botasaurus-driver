@@ -14,6 +14,7 @@ from . import tab
 from .config import PathLike, Config, free_port, is_posix
 from .connection import Connection
 from .custom_storage_cdp import get_cookies, set_cookies
+from .env import is_docker
 
 import os
 import signal
@@ -341,23 +342,17 @@ class Browser:
         self.close_chrome()
         self.close_tab_connections()
         self.close_browser_connection()
-        _process = self._process
-        _process_pid = self._process_pid
-
-        self._process = None
-        self._process_pid = None
-
-        if not wait_for_graceful_close(_process):
+        if not wait_for_graceful_close(self._process):
         #   process not closed
             try:
-                _process.terminate()
-                _process.wait()
+                self._process.terminate()
+                self._process.wait()
             except (Exception,):
                 try:
-                    _process.kill()
+                    self._process.kill()
                 except (Exception,):
                     try:
-                        kill_process(_process_pid)
+                        kill_process(self._process_pid)
                     except (TypeError,):
                         pass
                     except (PermissionError,):
@@ -366,15 +361,17 @@ class Browser:
                         pass
                     except (Exception,):
                         raise
+        self._process = None
+        self._process_pid = None
 
-        _process.terminate()
         if self.config.is_temporary_profile:
             delete_profile(self.config.profile_directory)
         self.config.close()
-        del _process
         instances = util.get_registered_instances()
         instances.remove(self)        
 
+        if is_docker:
+            util.close_zombie_processes()
     def close_browser_connection(self):
         try:
           self.connection.close()
