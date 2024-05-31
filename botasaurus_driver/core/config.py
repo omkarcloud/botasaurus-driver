@@ -337,7 +337,7 @@ def find_chrome_executable(return_all=False):
             if os.path.isfile(path):
                 return path
         
-        raise FileNotFoundError("You don't have Google Chrome installed on your Linux system. Please install it by visiting https://www.google.com/chrome/.")
+        raise FileNotFoundError("You don't have Google Chrome installed on your MacOS. Please install it by visiting https://www.google.com/chrome/.")
         # Path for Google Chrome on macOS.
     elif sys.platform.startswith("win"):
         PROGRAMFILES = f"{os.environ.get('PROGRAMW6432') or os.environ.get('PROGRAMFILES')}\\Google\\Chrome\\Application\\chrome.exe"
@@ -358,7 +358,7 @@ def find_chrome_executable(return_all=False):
                 else:
                     path = None
         if not path:
-            raise FileNotFoundError("You don't have Google Chrome installed on your Linux system. Please install it by visiting https://www.google.com/chrome/.")
+            raise FileNotFoundError("You don't have Google Chrome installed on your Windows system. Please install it by visiting https://www.google.com/chrome/.")
         else:
             return path
 
