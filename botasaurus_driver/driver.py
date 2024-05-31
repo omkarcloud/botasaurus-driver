@@ -137,9 +137,15 @@ class Element:
     def href(self):
         return  self._elem.attrs.get("href")
 
+    @property
+    def value(self):
+        return  self.run_js('(el) => el.value')
+
     def get_attribute(
         self, attribute: str
     ) -> str:
+        if attribute ==  'value':
+            return self.value 
         return self.attributes.get(attribute)
 
     def select(self, selector: str, wait: Optional[int] = Wait.SHORT) -> "Element":
