@@ -10,7 +10,7 @@ def get_description():
 
 setup(
     name="botasaurus_driver",
-    version='4.0.35',
+    version='4.0.37',
     description="Super Fast, Super Anti-Detect, and Super Intuitive Web Driver",
     long_description_content_type="text/markdown",
     long_description=get_description(),
@@ -38,9 +38,10 @@ setup(
         "Programming Language :: Python :: 3.11",
     ],
     install_requires=[
-        "websocket-client>=1.8.0",
-        "botasaurus-proxy-authentication",
+        "deprecated",
         "psutil",
+        "botasaurus-proxy-authentication",
+        "websocket-client>=1.8.0",
         "pyvirtualdisplay"
     ],
     url="https://github.com/omkarcloud/botasaurus-driver",
