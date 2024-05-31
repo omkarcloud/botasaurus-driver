@@ -248,8 +248,6 @@ class Browser:
         self._process_pid = self._process.pid
 
         self.base_folder_name = get_folder_name_from_path(self.config.profile_directory)
-        instances = util.get_registered_instances()
-        instances.add(self)
         chrome_url = f"http://{self.config.host}:{self.config.port}/json/version"
 
         self.info = ensure_chrome_is_alive(chrome_url)
@@ -272,6 +270,8 @@ class Browser:
         # self.connection.wait_to_be_idle()
         self.update_targets()
         # await self
+        instances = util.get_registered_instances()
+        instances.add(self)
 
         # CLEAN UO
         fls = get_target_folders(instances)
