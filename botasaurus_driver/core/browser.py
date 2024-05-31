@@ -34,18 +34,18 @@ def get_folder_name_from_path(absolute_path):
     return os.path.basename(absolute_path)
 
 def ensure_chrome_is_alive(url):
-    retries = 10
-    delay = 0.25
+    start_time = time.time()
     timeout = 5  # Adjust this value based on your requirements
-
-    for _ in range(retries):
+    duration = 15  # Duration to keep trying
+    retry_delay = 0.1
+    while time.time() - start_time < duration:
         try:
             response = requests.get(url, timeout=timeout)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException:
-            # print(f"Attempt {i+1} failed: {str(e)}")
-            time.sleep(delay)
+            time.sleep(retry_delay)  # Wait before retrying
+            continue
 
     raise Exception(f"Failed to connect to Chrome URL: {url}.")
 
