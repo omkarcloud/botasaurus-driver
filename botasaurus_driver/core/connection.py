@@ -230,7 +230,6 @@ class Connection:
             return
         if not self.listener or not self.listener.running:
             self.listener = Listener(self)
-
         
         tx_id = next(self.__count__)
         tx  = make_request_body(id=tx_id, cdp_obj = cdp_obj)
@@ -245,7 +244,7 @@ class Connection:
           raise           
         
         
-        result =   wait_till_response_arrives(self.queue, tx_id , 40)
+        result = wait_till_response_arrives(self.queue, tx_id , 40)
         result = parse_response(result, cdp_obj)
 
         return result

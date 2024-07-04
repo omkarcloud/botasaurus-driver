@@ -7,6 +7,7 @@ from typing import List, Union
 
 import time
 import requests
+from .retry_on_error import retry_if_is_error
 from .profiles import delete_profile, get_target_folders, run_check_and_delete_in_thread
 from .. import cdp
 from . import util
@@ -19,8 +20,10 @@ from .env import is_docker
 import os
 import signal
 
+
 def kill_process(pid):
     os.kill(pid, signal.SIGTERM)
+
 
 def get_folder_name_from_path(absolute_path):
     """
@@ -33,6 +36,7 @@ def get_folder_name_from_path(absolute_path):
         str: The folder name extracted from the absolute path.
     """
     return os.path.basename(absolute_path)
+
 
 def ensure_chrome_is_alive(url):
     start_time = time.time()
@@ -50,6 +54,7 @@ def ensure_chrome_is_alive(url):
 
     raise Exception(f"Failed to connect to Chrome URL: {url}.")
 
+
 def wait_for_graceful_close(_process):
     retries = 10
     delay = 0.05
@@ -60,6 +65,27 @@ def wait_for_graceful_close(_process):
         time.sleep(delay)
 
     return _process.poll() is not None
+
+
+def terminate_process(process: subprocess.Popen):
+    try:
+        process.terminate()
+        process.wait()
+    except Exception:
+        try:
+            process.kill()
+        except Exception:
+            try:
+                os.kill(process.pid, signal.SIGTERM)
+            except TypeError:
+                pass
+            except PermissionError:
+                pass
+            except ProcessLookupError:
+                pass
+            except Exception:
+                raise
+
 
 class Browser:
     _process = None
@@ -119,7 +145,7 @@ class Browser:
 
     @property
     def websocket_url(self):
-        return self.info['webSocketDebuggerUrl']
+        return self.info["webSocketDebuggerUrl"]
 
     @property
     def main_tab(self) -> tab.Tab:
@@ -192,7 +218,11 @@ class Browser:
             self.targets.remove(current_tab)
 
     def get(
-        self, url="chrome://welcome", new_tab: bool = False, new_window: bool = False, referrer=None
+        self,
+        url="chrome://welcome",
+        new_tab: bool = False,
+        new_window: bool = False,
+        referrer=None,
     ) -> tab.Tab:
         """top level get. utilizes the first tab to retrieve given url.
 
@@ -238,21 +268,12 @@ class Browser:
         exe = self.config.browser_executable_path
         params = self.config()
 
-        self._process = subprocess.Popen(
-            [exe, *params],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            close_fds=is_posix,
-        )
+        self.create_chrome_with_retries(exe, params)
 
         self._process_pid = self._process.pid
-
         self.base_folder_name = get_folder_name_from_path(self.config.profile_directory)
-        chrome_url = f"http://{self.config.host}:{self.config.port}/json/version"
 
-        self.info = ensure_chrome_is_alive(chrome_url)
-
-        self.connection = Connection(self.info['webSocketDebuggerUrl'], _owner=self)
+        self.connection = Connection(self.info["webSocketDebuggerUrl"], _owner=self)
 
         self.connection.handlers[cdp.target.TargetInfoChanged] = [
             self._handle_target_update
@@ -278,8 +299,26 @@ class Browser:
 
         if fls:
             run_check_and_delete_in_thread(fls)
-        # self.connection.handlers[cdp.inspector.Detached] = [self.close]
-        # return self
+
+    def create_chrome_with_retries(self, exe, params):
+        @retry_if_is_error()
+        def run():
+            process = subprocess.Popen(
+                [exe, *params],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                close_fds=is_posix,
+            )
+
+            chrome_url = f"http://{self.config.host}:{self.config.port}/json/version"
+            try:
+                self.info = ensure_chrome_is_alive(chrome_url)
+                self._process = process
+            except:
+                terminate_process(process)
+                raise
+
+        run()
 
     def _get_targets(self) -> List[cdp.target.TargetInfo]:
         info = self.connection.send(cdp.target.get_targets(), _is_update=True)
@@ -296,7 +335,7 @@ class Browser:
                     break
             else:
                 # new target
-                print('Making a New Connection')
+                # print("Making a New Connection")
                 self.targets.append(
                     Connection(
                         (
@@ -342,25 +381,9 @@ class Browser:
         self.close_chrome()
         self.close_tab_connections()
         self.close_browser_connection()
-        if not wait_for_graceful_close(self._process):
-        #   process not closed
-            try:
-                self._process.terminate()
-                self._process.wait()
-            except (Exception,):
-                try:
-                    self._process.kill()
-                except (Exception,):
-                    try:
-                        kill_process(self._process_pid)
-                    except (TypeError,):
-                        pass
-                    except (PermissionError,):
-                        pass
-                    except (ProcessLookupError,):
-                        pass
-                    except (Exception,):
-                        raise
+        if self._process:
+            if not wait_for_graceful_close(self._process):
+                terminate_process(self._process)
         self._process = None
         self._process_pid = None
 
@@ -368,33 +391,38 @@ class Browser:
             delete_profile(self.config.profile_directory)
         self.config.close()
         instances = util.get_registered_instances()
-        instances.remove(self)        
+        instances.remove(self)     
 
         if is_docker:
             util.close_zombie_processes()
+
     def close_browser_connection(self):
         try:
-          self.connection.close()
+            if self.connection:
+                self.connection.close()
+                self.connection = None
         except Exception as e:
             print(e)
 
     def close_tab_connections(self):
         try:
             while self.targets:
-                # close just connections, chrome tabs are closed 
+                # close just connections, chrome tabs are closed
                 self.targets.pop().close_connections()
         except Exception as e:
             print(e)
 
     def close_chrome(self):
         try:
-          self.connection.send(cdp.browser.close())
+            if self.connection:
+                self.connection.send(cdp.browser.close())
+                self.connection = None
         except Exception as e:
             print(e)
 
-
     def __del__(self):
         pass
+
 
 class CookieJar:
     def __init__(self, browser: Browser):
@@ -475,5 +503,6 @@ class CookieJar:
         else:
             connection = self._browser.connection
         connection.send(cdp.storage.clear_cookies())
+
 
 atexit.register(util.deconstruct_browser)
