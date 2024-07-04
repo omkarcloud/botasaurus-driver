@@ -118,13 +118,22 @@ def solve_full_cf(driver):
                 sleep(1.79)    
 
 
+def get_widget_iframe(driver):
+    return driver.select('[title="Widget containing a Cloudflare security challenge"]', None)
+
+def wait_for_widget_iframe(driver):
+    iframe = get_widget_iframe(driver)
+    while not iframe:
+        sleep(1)
+        iframe = get_widget_iframe(driver)
+    return iframe
 
 def wait_till_cloudflare_leaves_widget(driver):
     WAIT_TIME = 30
     start_time = time()
     
     while True:
-                    iframe = get_widget_iframe(driver)                
+                    iframe = wait_for_widget_iframe(driver)                
                     # success check 
                     if issuccess(iframe):
                         return
@@ -156,29 +165,14 @@ def wait_till_cloudflare_leaves_widget(driver):
 def issuccess(iframe):
     return iframe.select('#success[style="display: flex; visibility: visible;"]', None)
 
-def get_widget_iframe(driver):
-    return driver.select('[title="Widget containing a Cloudflare security challenge"]', None)
-
 def solve_widget_cf(driver):
-    iframe = get_widget_iframe(driver)
-    while not iframe:
-        opponent = driver.get_bot_detected_by()
-        if opponent != Opponent.CLOUDFLARE:
-            return wait_till_document_is_ready(driver._tab, driver.config.wait_for_complete_page_load)
-        sleep(1)
-        iframe = get_widget_iframe(driver)
+    iframe = wait_for_widget_iframe(driver)
 
     WAIT_TIME = 16
     start_time = time()
 
     while True:
-        iframe = get_widget_iframe(driver)
-        while not iframe:
-            opponent = driver.get_bot_detected_by()
-            if opponent != Opponent.CLOUDFLARE:
-                return wait_till_document_is_ready(driver._tab, driver.config.wait_for_complete_page_load)
-            sleep(1)
-            iframe = get_widget_iframe(driver)
+        iframe = wait_for_widget_iframe(driver)
 
         if issuccess(iframe):
             return wait_till_document_is_ready(driver._tab, driver.config.wait_for_complete_page_load)
@@ -194,6 +188,7 @@ def solve_widget_cf(driver):
             print("Cloudflare has not given us a captcha. Exiting ...")
             raise CloudflareDetectionException()
         sleep(1.79)
+
 def bypass_if_detected(driver, ):
     opponent = driver.get_bot_detected_by()
     if opponent == Opponent.CLOUDFLARE:
