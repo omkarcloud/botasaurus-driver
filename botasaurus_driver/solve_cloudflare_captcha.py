@@ -22,13 +22,25 @@ def wait_till_document_is_ready(tab, wait_for_complete_page_load):
             print("An exception occurred", e)
 
 def get_rayid(driver):
-    ray = driver.get_text(".ray-id code")
+    ray = driver.run_js("""
+    var scriptElement = document.querySelector('script.xh-highlight');
+    if (scriptElement) {
+        var scriptContent = scriptElement.innerHTML;
+        var cRayMatch = scriptContent.match(/cRay: '([^']+)'/);
+        return cRayMatch ? cRayMatch[1] : null;
+    } else {
+        return null;
+    }
+    """)
     if ray:
         return ray
 
 
 def get_iframe(driver):
-    return driver.select("#turnstile-wrapper iframe", None)
+    iframe = driver.select("#turnstile-wrapper iframe", None)
+    if not iframe:
+        iframe = driver.select("#cf-turnstile iframe", None)
+    return iframe
 
 
 def wait_till_cloudflare_leaves(driver, previous_ray_id, raise_exception):
@@ -93,6 +105,7 @@ def wait_till_cloudflare_leaves(driver, previous_ray_id, raise_exception):
 
 
 def bypass_if_detected(driver, raise_exception=True):
+    sleep(3)
     opponent = driver.get_bot_detected_by()
     if opponent == Opponent.CLOUDFLARE:
         iframe = get_iframe(driver)

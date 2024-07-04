@@ -844,6 +844,10 @@ class DriverBase():
         clf = self.select("#challenge-running", wait=None)
         if clf is not None or self.title == "Just a moment...":
             return Opponent.CLOUDFLARE
+        
+        clf = self.get_element_containing_text("cloudflare", wait=None)
+        if clf is not None:
+            return Opponent.CLOUDFLARE
 
         pmx = self.get_element_containing_text("Please verify you are a human", wait=None)
 
