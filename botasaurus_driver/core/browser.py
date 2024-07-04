@@ -391,7 +391,10 @@ class Browser:
             delete_profile(self.config.profile_directory)
         self.config.close()
         instances = util.get_registered_instances()
-        instances.remove(self)     
+        try:
+            instances.remove(self)
+        except KeyError:
+            pass
 
         if is_docker:
             util.close_zombie_processes()

@@ -357,6 +357,20 @@ class Element:
             return self.remote_object.object_id
         except AttributeError:
             pass
+
+    def mouse_move(self):
+        """moves mouse (not click), to element position. when an element has an
+        hover/mouseover effect, this would trigger it"""
+        center = self.get_position().center
+        
+        self._tab.send(
+            cdp.input_.dispatch_mouse_event("mouseMoved", x=center[0] -4, y=center[1]-4)
+        )
+        self._tab.sleep(0.07)
+        self._tab.send(
+            cdp.input_.dispatch_mouse_event("mouseReleased", x=center[0]-4, y=center[1]-4)
+        )
+
     def click(self):
         """
         Click the element.
@@ -365,7 +379,6 @@ class Element:
         :rtype:
         """
         self.raise_if_disconnected()
-        
         self._remote_object = self._tab.send(
             cdp.dom.resolve_node(backend_node_id=self.backend_node_id)
         )
