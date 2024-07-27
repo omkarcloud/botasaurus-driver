@@ -97,8 +97,6 @@ template = """function fetchData(url) {
       }, {}),
       final_url: response.url,
       cookies: document.cookie.split(';').reduce((cookies, cookie) => {
-       console.log(response.statusText)
-       debugger
         const [ name, value ] = cookie.split('=').map(c => c.trim());
         return { ...cookies, [name]: value };
         }, {}),

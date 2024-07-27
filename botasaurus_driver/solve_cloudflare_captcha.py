@@ -53,14 +53,18 @@ def wait_till_cloudflare_leaves(driver, previous_ray_id):
                 while True:
 
                     iframe = get_iframe(driver)
+                    if iframe:
+                        checkbox = iframe.get_element_at_point(main_x,main_y, label_selector, wait=None)
+                        takinglong = istakinglong(iframe)
+                        if takinglong or checkbox:
 
-                    checkbox = iframe.get_element_at_point(main_x,main_y, label_selector, wait=None)
-                    takinglong = istakinglong(iframe)
-                    if takinglong or checkbox:
+                            # new captcha given
+                            print("Cloudflare has detected us. Exiting ...")
+                            raise CloudflareDetectionException()
 
-                        # new captcha given
-                        print("Cloudflare has detected us. Exiting ...")
-                        raise CloudflareDetectionException()
+                    opponent = driver.get_bot_detected_by()
+                    if opponent != Opponent.CLOUDFLARE:
+                        return
 
                     elapsed_time = time() - start_time
                     if elapsed_time > WAIT_TIME:
@@ -69,9 +73,6 @@ def wait_till_cloudflare_leaves(driver, previous_ray_id):
 
                         raise CloudflareDetectionException()
 
-                    opponent = driver.get_bot_detected_by()
-                    if opponent != Opponent.CLOUDFLARE:
-                        return
 
                     sleep(1.79)
 
@@ -134,25 +135,30 @@ def wait_till_cloudflare_leaves_widget(driver):
     start_time = time()
     
     while True:
-                    iframe = wait_for_widget_iframe(driver)                
-                    # success check 
-                    if issuccess(iframe):
+                    iframe = get_widget_iframe(driver)
+                    if iframe:
+                        # success check 
+                        if issuccess(iframe):
+                            return
+
+                        # failure 
+                        if isfailure(iframe):
+                            print("Cloudflare has detected us. Exiting ...")
+                            raise CloudflareDetectionException()
+
+                        # todo: remove checbox check
+                        # checkbox = iframe.select(label_selector, None)        
+                        takinglong = istakinglong(iframe)
+
+                        if takinglong:
+
+                            # new captcha given
+                            print("Cloudflare has detected us. Exiting ...")
+                            raise CloudflareDetectionException()
+
+                    opponent = driver.get_bot_detected_by()
+                    if opponent != Opponent.CLOUDFLARE:
                         return
-
-                    # failure 
-                    if isfailure(iframe):
-                        print("Cloudflare has detected us. Exiting ...")
-                        raise CloudflareDetectionException()
-
-                    # todo: remove checbox check
-                    # checkbox = iframe.select(label_selector, None)        
-                    takinglong = istakinglong(iframe)
-
-                    if takinglong:
-
-                        # new captcha given
-                        print("Cloudflare has detected us. Exiting ...")
-                        raise CloudflareDetectionException()
 
                     elapsed_time = time() - start_time
                     if elapsed_time > WAIT_TIME:

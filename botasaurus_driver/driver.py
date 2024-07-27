@@ -84,7 +84,6 @@ def matches_regex(s, pattern):
     match = regex.search(s)
     # Return True if a match is found, False otherwise
     return bool(match)    
-    # return bool(re.match(pattern, s))
 
 def _perform_get_frame(driver, link):
     all_targets = driver._browser.targets
@@ -193,6 +192,17 @@ class Element:
         if attribute ==  'value':
             return self.value 
         return self.attributes.get(attribute)
+
+    def get_bounding_rect(self, absolute=False):
+        return  self._elem.get_position(absolute)
+
+    def get_shadow_root(self, wait: Optional[int] = Wait.SHORT):
+        rect = self.get_bounding_rect()
+        x = rect.x 
+        y = rect.y 
+        elem_coro = self._tab.get_element_at_point(x,y, wait)
+        elem = self._tab._run(elem_coro)
+        return make_element(self._driver, self._tab, elem) if elem else None
 
     def select(self, selector: str, wait: Optional[int] = Wait.SHORT) -> "Element":
         elem_coro = self._elem.query_selector(selector, wait)
