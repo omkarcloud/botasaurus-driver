@@ -68,16 +68,28 @@ def close_local_proxy(local_proxy):
     from botasaurus_proxy_authentication import close_proxy
     return close_proxy(local_proxy)
 
-def create_extensions_string(extensions):
-            if not isinstance(extensions, list):
-                extensions = [extensions]
-            extensions_str = ",".join(
-                [
-                    extension.load(with_command_line_option=False)
-                    for extension in extensions
-                ]
-            )
-            return "--load-extension=" + extensions_str
+def create_extstring(extensions):
+    if not isinstance(extensions, list):
+        extensions = [extensions]
+    
+    extstr = []
+    
+    for extension in extensions:
+        if isinstance(extension, str):
+            if os.path.isdir(extension):
+                extstr.append(extension)
+            else:
+                raise ValueError(f"{extension} is not a valid directory.")
+        elif hasattr(extension, 'path'):
+            if os.path.isdir(extension.path):
+                extstr.append(extension.path)
+            else:
+                raise ValueError(f"{extension.path} is not a valid directory.")
+        else:
+            raise ValueError("Extension should be a directory, not a packed crx")
+    
+    return "--load-extension=" + ",".join(extstr)
+
 
 def add_essential_options(options, profile, window_size, user_agent):
 
@@ -272,7 +284,7 @@ class Config:
             args.append(f'--lang={self.lang}')
 
         if self.extensions:
-            args.append(create_extensions_string(self.extensions))
+            args.append(create_extstring(self.extensions))
 
         if self.local_proxy:
             args.append(f'--proxy-server=' + self.local_proxy)
@@ -363,4 +375,3 @@ def find_chrome_executable(return_all=False):
             return path
 
     return None
-
