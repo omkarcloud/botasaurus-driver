@@ -363,13 +363,49 @@ class Element:
         hover/mouseover effect, this would trigger it"""
         center = self.get_position().center
         
+        x = center[0] -4
+        y = center[1]- 4
         self._tab.send(
-            cdp.input_.dispatch_mouse_event("mouseMoved", x=center[0] -4, y=center[1]-4)
+            cdp.input_.dispatch_mouse_event("mouseMoved", x=x, y=y)
         )
-        self._tab.sleep(0.07)
+        # self._tab.sleep(0.07)
+        # self._tab.send(
+        #     cdp.input_.dispatch_mouse_event("mouseReleased", x=center[0]-4, y=center[1]-4)
+        # )
+    def humane_click(self):
+        """
+        Click the element.
+
+        :return:
+        :rtype:
+        """
+        self.raise_if_disconnected()
+
+        center = self.get_position().center
+        # a bit off for better humaness
+        x = center[0] - 4
+        y = center[1] - 3
         self._tab.send(
-            cdp.input_.dispatch_mouse_event("mouseReleased", x=center[0]-4, y=center[1]-4)
+            cdp.input_.dispatch_mouse_event("mouseMoved", x=x, y=y)
         )
+        time.sleep(0.07)
+        self._tab.send(
+           cdp.input_.dispatch_mouse_event(
+            "mousePressed",
+            x=x,
+            y=y,
+            button=cdp.input_.MouseButton.LEFT,
+            click_count=1
+        )
+        )
+        time.sleep(0.09)
+        self._tab.send (cdp.input_.dispatch_mouse_event(
+            "mouseReleased",
+            x=x,
+            y=y,
+            button=cdp.input_.MouseButton.LEFT,
+            click_count=1
+        ))
 
     def click(self):
         """

@@ -118,6 +118,8 @@ def filter_recurse_all(
             if predicate(child):
                 # if predicate is True
                 out.append(child)
+            if child.shadow_roots is not None:
+                out.extend(filter_recurse_all(child.shadow_roots[0], predicate))
             out.extend(filter_recurse_all(child, predicate))
             # if result:
             #     out.append(result)
@@ -139,6 +141,10 @@ def filter_recurse(doc: T, predicate: Callable[[cdp.dom.Node, Element], bool]) -
             if predicate(child):
                 # if predicate is True
                 return child
+            if child.shadow_roots:
+                shadow_root_result = filter_recurse(child.shadow_roots[0], predicate)
+                if shadow_root_result:
+                    return shadow_root_result                    
             result = filter_recurse(child, predicate)
             if result:
                 return result

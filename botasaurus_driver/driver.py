@@ -42,7 +42,6 @@ def _get_iframe_tab(driver, internal_elem):
             iframe_tab = tgt
             break
     return iframe_tab
-
 def get_iframe_tab(driver, internal_elem):
     iframe_tab = _get_iframe_tab(driver, internal_elem)
 
@@ -77,6 +76,53 @@ def create_iframe_element(driver, internal_elem):
     
     return IframeElement(driver.config, iframe_tab,driver._browser)
 
+def matches_regex(s, pattern):
+    import re
+     # Compile the regex pattern
+    regex = re.compile(pattern)
+    # Use the search method to find a match
+    match = regex.search(s)
+    # Return True if a match is found, False otherwise
+    return bool(match)    
+    # return bool(re.match(pattern, s))
+
+def _perform_get_frame(driver, link):
+    all_targets = driver._browser.targets
+    
+    for tgt in all_targets:
+        if str(tgt.target.type_) == 'iframe' :
+            if link:
+                if matches_regex(tgt.target.url, link):
+                    return tgt
+            else: 
+                    return tgt
+
+def get_iframe_tab_by_link(driver, link, timeout):
+    iframe_tab = _perform_get_frame(driver, link)
+
+    if iframe_tab:
+        return iframe_tab
+
+    if timeout:
+        start_time = time.time()
+        while True:
+            iframe_tab = _perform_get_frame(driver, link)
+            if iframe_tab:
+                return iframe_tab
+
+            driver._update_targets()
+
+            if time.time() - start_time > timeout:
+                return None
+
+            time.sleep(0.1)
+
+def get_iframe_elem_by_link(driver, link, timeout):
+    iframe_tab = get_iframe_tab_by_link(driver, link, timeout)
+    if iframe_tab:
+        wait_for_iframe_tab_load(driver, iframe_tab)
+        return IframeElement(driver.config, iframe_tab, driver._browser)
+    return None
 def make_element(driver, current_tab, internal_elem):
     if not internal_elem:
         return None
@@ -167,6 +213,11 @@ class Element:
         else:
             self._tab._run(self._elem.click())
 
+    def humane_click(self, selector: Optional[str] = None, wait: Optional[int] = Wait.SHORT) -> None:
+        if selector:
+            self.wait_for_element(selector, wait).humane_click()
+        else:
+            self._tab._run(self._elem.humane_click())
     def type(
         self, text: str, selector: Optional[str] = None, wait: Optional[int] = Wait.SHORT
     ) -> None:
@@ -471,6 +522,11 @@ class DriverBase():
         return self.select("body").text
 
     @property
+    def requests(self):
+        from .requests import Request
+        return Request(self)
+
+    @property
     def page_html(self):
         return self._run(self._tab.get_content())
 
@@ -606,12 +662,49 @@ class DriverBase():
         elems = self._run(elems_coro)
         return [make_element(self, self._tab, e) for e in elems]
 
+    def get_element_at_point(
+        self, x: int, y:int, child_selector: Optional[str]=None, wait: Optional[int] = Wait.SHORT
+    ) -> Element:
+        elem_coro = self._tab.get_element_at_point(x,y, wait)
+        elem = self._run(elem_coro)
+        el = make_element(self, self._tab, elem) if elem else None
+
+        if not el: 
+            return
+        
+        if child_selector:
+            selected_el = el.select(child_selector, wait=None)
+            if selected_el:
+              return selected_el
+            else:
+                if wait:
+                    now = time.time()
+                    while not selected_el:
+                        elem_coro = self._tab.get_element_at_point(x,y, None)
+                        elem = self._run(elem_coro)
+                        el = make_element(self, self._tab, elem) if elem else None
+                        if el:
+                            selected_el = el.select(child_selector, wait=None)
+                        if time.time() - now > wait:
+                            return selected_el
+                        time.sleep(0.2)
+                return selected_el
+        
+        return el
+
+    def get_iframe_by_link(self, link_regex: Optional[str]=None, wait: Optional[int] = Wait.SHORT):
+        return get_iframe_elem_by_link(self, link_regex, wait)
+
     def is_element_present(self, selector: str, wait: Optional[int] = None) -> bool:
         return self.select(selector, wait) is not None
 
     def click(self, selector: str, wait: Optional[int] = Wait.SHORT) -> None:
         elem = self.wait_for_element(selector, wait)
         elem.click()
+
+    def humane_click(self, selector: str, wait: Optional[int] = Wait.SHORT) -> None:
+        elem = self.wait_for_element(selector, wait)
+        elem.humane_click()        
 
     def click_element_containing_text(self, text: str, wait: Optional[int] = Wait.SHORT) -> None:
         elem = self.get_element_containing_text(text, wait)
@@ -842,10 +935,13 @@ class DriverBase():
 
     def get_bot_detected_by(self) -> str:
         # or script[data-cf-beacon]
-        clf = self.select("#challenge-running, script[data-cf-beacon]", wait=None)
-        if clf is not None or self.title == "Just a moment...":
+        # clf = self.select("#challenge-running, script[data-cf-beacon]", wait=None)
+        if self.get_iframe_by_link("challenges.cloudflare.com", None) is not None or self.title == "Just a moment...":
             return Opponent.CLOUDFLARE
-
+        if self.select('script[data-cf-beacon]', None):
+            # Wait for the iframe to render
+            if self.get_iframe_by_link("challenges.cloudflare.com", 12):
+                return Opponent.CLOUDFLARE
         pmx = self.get_element_containing_text("Please verify you are a human", wait=None)
 
         if pmx is not None:
@@ -1039,10 +1135,10 @@ class Driver(DriverBase):
         self.run_cdp_command(block_urls(urls))
 
     def block_images_and_css(self) -> None:
-        self.block_urls(['.css', '.jpg', '.jpeg', '.png', '.svg', '.gif', '.woff', '.pdf', '.zip'])    
+        self.block_urls(['.css', '.jpg', '.jpeg', '.png', '.svg', '.gif', '.woff', '.pdf', '.zip',".ico",])    
 
     def block_images(self) -> None:
-        self.block_urls(['.jpg', '.jpeg', '.png', '.svg', '.gif', '.woff', '.pdf', '.zip'])
+        self.block_urls(['.jpg', '.jpeg', '.png', '.svg', '.gif', '.woff', '.pdf', '.zip',".ico",])
 
     def close(self) -> None:
         if self.config.tiny_profile:

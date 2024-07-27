@@ -212,7 +212,6 @@ class Tab(Connection):
         )
         if timeout:
             while not item:
-                self
                 item = self.find_element_by_text(
                     text, best_match, return_enclosing_element, type=type, exact_match=exact_match
                 )
@@ -243,13 +242,46 @@ class Tab(Connection):
         item = self.query_selector(selector, _node)
         if timeout:
             while not item:
-                self
                 item = self.query_selector(selector, _node)
                 if time.time() - now > timeout:
                     return None
                 self.sleep(0.5)
         return item
-    
+
+    def perform_get_element_at_point(self,x: int, y:int, raiseError = False):
+        doc: cdp.dom.Node = self.send(cdp.dom.get_document(-1, True))
+        # print(self.send(cdp.dom.get_node_for_location(x=x, y=y, include_user_agent_shadow_dom=False)))
+        try:
+          bid, __, nid = self.send(cdp.dom.get_node_for_location(x=x, y=y, include_user_agent_shadow_dom=False))
+        except ChromeException as e:
+          if e.message and "No node found" in e.message:
+            if raiseError:
+                raise
+            time.sleep(1)
+            return self.perform_get_element_at_point(x,y, True)
+          else:
+              raise
+        
+
+        if nid:
+          node = self.send(cdp.dom.describe_node( nid, ))
+        else:
+            return None
+        
+        return element.create(node, self, doc)
+
+    def get_element_at_point(self,x: int, y:int, timeout: Optional[int] = None):
+        now = time.time()
+
+        results = self.perform_get_element_at_point(x,y)
+        if timeout:
+            while not results:
+                results = self.perform_get_element_at_point(x,y)
+                if time.time() - now > timeout:
+                    return results
+                self.sleep(0.5)
+        return results
+
     def find_all(
         self,
         text: str,
@@ -272,7 +304,6 @@ class Tab(Connection):
         results = self.find_elements_by_text(text, type=type, exact_match=exact_match)
         if timeout:
             while not results:
-                self
                 results = self.find_elements_by_text(text, type=type, exact_match=exact_match)
                 if time.time() - now > timeout:
                     return []
@@ -301,7 +332,6 @@ class Tab(Connection):
         results = self.query_selector_all(selector, _node)
         if timeout:
             while not results:
-                self
                 results = self.query_selector_all(selector, _node)
                 if time.time() - now > timeout:
                     return results
@@ -345,8 +375,9 @@ class Tab(Connection):
             
 
         except ChromeException as e:
+            is_no_node = "could not find node" in e.message.lower()
             if _node is not None:
-                if "could not find node" in e.message.lower():
+                if is_no_node:
                     if getattr(_node, "__last", None):
                         del _node.__last
                         return []
@@ -360,8 +391,10 @@ class Tab(Connection):
             else:
                 # TODO: Why, i guess removable maybe
                 self.send(cdp.dom.disable())
+                if is_no_node:
+                    # simply means that doc was destroyed in navigation
+                    return []
                 raise
-
         if not node_ids:
             return []
         results = []
@@ -403,11 +436,12 @@ class Tab(Connection):
             node_id = self.send(cdp.dom.query_selector(doc.node_id, selector))
 
         except ChromeException as e:
+            is_no_node = "could not find node" in e.message.lower()
             if _node is not None:
-                if "could not find node" in e.message.lower():
+                if is_no_node:
                     if getattr(_node, "__last", None):
                         del _node.__last
-                        return []
+                        return None
                     # if supplied node is not found, the dom has changed since acquiring the element
                     # therefore we need to update our passed node and try again
                     _node.update()
@@ -417,6 +451,9 @@ class Tab(Connection):
                     return self.query_selector(selector, _node)
             else:
                 self.send(cdp.dom.disable())
+                if is_no_node:
+                    # simply means that doc was destroyed in navigation
+                    return None
                 raise
         if not node_id:
             return
