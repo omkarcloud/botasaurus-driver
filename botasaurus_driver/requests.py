@@ -76,9 +76,9 @@ template = """function fetchData(url) {
         "sec-fetch-mode": "navigate",
         "sec-fetch-site": "same-origin",
         "sec-fetch-user": "?1",
-        "upgrade-insecure-requests": "1"
+        "upgrade-insecure-requests": "1",
+        ...args['headers'],
     },
-  "referrer": "REF",
   "referrerPolicy": "strict-origin-when-cross-origin",
   "body": null,
   "method": "GET",
@@ -116,19 +116,16 @@ class Request():
     def __init__(self, driver):
         self.driver = driver
 
-    def get(self, url, referer=None):
+    def get(self, url, headers=None):
         fetchcode = template.replace("LINK", url)
-        if not referer:
-            referer = self.driver.current_url
-            if referer == "about:blank":
-                print("nf")
-                referer = None
         
-        if referer:
-            fetchcode = fetchcode.replace("REF", referer)
+        if headers is None:
+            fetchcode = fetchcode.replace("...args['headers'],", "")
         else:
-            fetchcode = fetchcode.replace('"referrer": "REF",', "")
-        data = self.driver.run_js(fetchcode)
+            if not isinstance(headers, dict):
+              raise TypeError("Headers must be a dictionary.")
+            headers = {"headers":headers}
+        data = self.driver.run_js(fetchcode, headers)
         
         if data['error']:
             raise DriverException(data['error'])

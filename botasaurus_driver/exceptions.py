@@ -131,6 +131,16 @@ class JavascriptException(ChromeException):
         
         super().__init__(*args, **kwargs)
 
+
+class SyntaxError(DriverException):
+    def __init__(self, message):  # real signature unknown
+        super().__init__(f"Syntax Error in the following code:\n\n{message}\nPlease review the syntax and run again.")
+
+class ReferenceError(DriverException):
+    def __init__(self, message):  # real signature unknown
+        super().__init__(f"ReferenceError in the following code:\n\n{message}\nPlease review the code and run again.")
+
+
 class JavascriptSyntaxException(JavascriptException):
 
     def __init__(self, msg = "Syntax error in the js code.") -> None:
@@ -147,3 +157,9 @@ class JavascriptRuntimeException(JavascriptException):
     def __str__(self) -> str:
         exception_msg = f"{self.msg}"
         return exception_msg
+    
+def handle_exception(core, exception):
+        if exception.class_name == 'SyntaxError':
+          raise SyntaxError(core)
+        if exception.class_name == 'ReferenceError':
+          raise ReferenceError(core)      

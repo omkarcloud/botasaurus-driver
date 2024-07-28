@@ -5,7 +5,7 @@ import typing
 from datetime import datetime
 from typing import List, Union, Optional
 
-from ..exceptions import ElementWithSelectorNotFoundException, DriverException, JavascriptException, ChromeException, InvalidFilenameException, JavascriptSyntaxException, ScreenshotException
+from ..exceptions import handle_exception, ReferenceError, SyntaxError, ElementWithSelectorNotFoundException, DriverException, JavascriptException, ChromeException, InvalidFilenameException, JavascriptSyntaxException, ScreenshotException
 from ..driver_utils import create_screenshot_filename, get_download_directory, get_download_filename
 
 from . import element
@@ -27,6 +27,14 @@ def append_safe(results, elem, text, exact_match):
                     results.append(elem)
             else:
                 results.append(elem)
+              
+def make_core_string(SCRIPT,args ):
+            expression = r"const args = JSON.parse('ARGS'); SCRIPT".replace("SCRIPT", SCRIPT)
+            if args is not None:
+                expression = expression.replace("ARGS",  json.dumps(args).replace(r'\"', r'\\"'))
+            else:
+                expression = expression.replace("const args = JSON.parse('ARGS'); ", "")
+            return expression                
 class Tab(Connection):
     """
     :ref:`tab` is the controlling mechanism/connection to a 'target',
@@ -644,10 +652,11 @@ class Tab(Connection):
 
 
     def evaluate(
-        self, expression: str, await_promise=False, return_by_value=True
+        self, expression: str, args=None, await_promise=False, return_by_value=True
     ):
+        core = make_core_string(expression, args)
         expression = r"""(() => {
-const resp = (() => { SCRIPT })()
+const resp = (() => { CORE })()
 if (resp instanceof Promise) {
     return new Promise((resolve, reject) => {
         return resp.then(x => resolve(JSON.stringify({ "x": x }))).catch(reject)
@@ -655,7 +664,7 @@ if (resp instanceof Promise) {
 } else {
     return JSON.stringify({ "x": resp })
 }
-})()""".replace("SCRIPT", expression)
+})()""".replace("CORE", core)
         response = self.send(
             cdp.runtime.evaluate(
                 expression=expression,
@@ -670,11 +679,12 @@ if (resp instanceof Promise) {
 
         remote_object, errors = response
         if errors:
+            handle_exception(core, errors.exception)
             raise JavascriptException(errors)
         if remote_object:
             if return_by_value:
                 if remote_object.value:
-                    return json.loads(util.get_remote_object_value(remote_object)).get("x")
+                    return json.loads(util.get_remote_object_value(remote_object, core)).get("x")
 
             else:
                 return remote_object, errors

@@ -16,6 +16,13 @@ from .. import cdp
 if typing.TYPE_CHECKING:
     from .tab import Tab
 
+def make_core_string(SCRIPT,args ):
+            expression = r"const args = JSON.parse('ARGS'); const resp = (SCRIPT)(element);".replace("SCRIPT", SCRIPT)
+            if args is not None:
+                expression = expression.replace("ARGS",  json.dumps(args).replace(r'\"', r'\\"'))
+            else:
+                expression = expression.replace("const args = JSON.parse('ARGS'); ", "")
+            return expression
 def create(node: cdp.dom.Node, tab: Tab, tree: typing.Optional[cdp.dom.Node] = None):
     """
     factory for Elements
@@ -485,7 +492,7 @@ class Element:
         """
         return self.apply(f"(e) => e['{js_method}']()")
 
-    def apply(self, js_function, return_by_value=True):
+    def apply(self, js_function, args=None,return_by_value=True):
         """
         apply javascript to this element. the given js_function string should accept the js element as parameter,
         and can be an arrow function, or function declaration.
@@ -501,12 +508,11 @@ class Element:
         :return:
         :rtype:
         """
+        core = make_core_string(js_function, args)
         js_function = r"""function (element) {
-    const resp = (SCRIPT)(element);
+    CORE
     return JSON.stringify({ "x": resp });
-    }""".replace(
-            "SCRIPT", js_function
-        )
+    }""".replace("CORE", core)
         self._remote_object = self._tab.send(
             cdp.dom.resolve_node(backend_node_id=self.backend_node_id)
         )
@@ -526,7 +532,7 @@ class Element:
 
         if result and result[0]:
             if return_by_value:
-                return json.loads(util.get_remote_object_value(result[0])).get("x")
+                return json.loads(util.get_remote_object_value(result[0], core)).get("x")
             return json.loads(result[0]).get("x")
         elif result[1]:
             return json.loads(result[1]).get("x")

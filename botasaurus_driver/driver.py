@@ -472,9 +472,9 @@ class Element:
     def __repr__(self):
         return self._elem.__repr__()
 
-    def run_js(self, script: str) -> Any:
+    def run_js(self, script: str, args: Optional[any]=None) -> Any:
         self._tab._run(self._elem.raise_if_disconnected())
-        return self._tab._run(self._elem.apply(script))
+        return self._tab._run(self._elem.apply(script,args=args,))
 
 
 def get_inside_input_selector(type):
@@ -695,9 +695,9 @@ class DriverBase:
 
         block_if_should(self)
 
-    def run_js(self, script: str) -> Any:
+    def run_js(self, script: str, args: Optional[any]=None) -> Any:
         # Run it in IIFE for isloation
-        return self._run(self._tab.evaluate(script, await_promise=True))
+        return self._run(self._tab.evaluate(script,args=args,await_promise=True))
 
     def run_cdp_command(self, command) -> Any:
         return self._run(self._tab.run_cdp_command(command))

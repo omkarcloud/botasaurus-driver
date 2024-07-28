@@ -6,7 +6,7 @@ from typing import Optional, List, Set, Union, Callable
 
 import typing
 
-from ..exceptions import JavascriptRuntimeException
+from ..exceptions import JavascriptRuntimeException, handle_exception
 
 from .element import Element
 
@@ -34,8 +34,9 @@ def close_zombie_processes():
         pass    
 
 
-def get_remote_object_value(x):
+def get_remote_object_value(x,core):
             if x.subtype=="error":
+                handle_exception(core, x)
                 raise JavascriptRuntimeException(x.description)
             return x.value
 
