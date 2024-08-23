@@ -79,6 +79,7 @@ template = """function fetchData(url) {
         "upgrade-insecure-requests": "1",
         ...args['headers'],
     },
+  "referrer": "REF",
   "referrerPolicy": "strict-origin-when-cross-origin",
   "body": null,
   "method": "GET",
@@ -116,7 +117,7 @@ class Request():
     def __init__(self, driver):
         self.driver = driver
 
-    def get(self, url, headers=None):
+    def get(self, url, headers=None, referer=None,):
         fetchcode = template.replace("LINK", url)
         
         if headers is None:
@@ -125,8 +126,15 @@ class Request():
             if not isinstance(headers, dict):
               raise TypeError("Headers must be a dictionary.")
             headers = {"headers":headers}
-        data = self.driver.run_js(fetchcode, headers)
         
+        if referer is None:
+            fetchcode = fetchcode.replace('"referrer": "REF",', "")
+        else:
+            if not isinstance(referer, str):
+              raise TypeError("referer must be a string.")
+            fetchcode = fetchcode.replace("REF", referer)
+
+        data = self.driver.run_js(fetchcode, headers)
         if data['error']:
             raise DriverException(data['error'])
         

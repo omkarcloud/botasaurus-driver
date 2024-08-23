@@ -109,6 +109,8 @@ def solve_full_cf(driver):
 
                 checkbox = iframe.get_element_at_point(main_x,main_y, label_selector, wait=None)
                 if checkbox:
+                    raise CloudflareDetectionException()
+                    # print('aa')
                     checkbox.humane_click()
                     wait_till_cloudflare_leaves(driver, previous_ray_id)
                     return wait_till_document_is_ready(driver._tab, driver.config.wait_for_complete_page_load)
