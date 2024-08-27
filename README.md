@@ -77,9 +77,11 @@ Botasaurus Driver provides several handy methods for web automation tasks such a
 
 - Working with iframes:
   ```python
-  driver.get("https://www.g2.com/products/github/reviews.html?page=5&product_id=github")
-  iframe = driver.select_iframe("#turnstile-wrapper iframe")
-  text_content = iframe.select("body label").text
+  driver.get("https://www.freecodecamp.org/news/using-entity-framework-core-with-mongodb/")
+  iframe = driver.get_iframe_by_link("www.youtube.com/embed") 
+  # OR following works as well
+  # iframe = driver.select(".embed-wrapper iframe") 
+  freecodecamp_youtube_subscribers_count = iframe.select(".ytp-title-expanded-subtitle").text
   ```
 
 - Miscellaneous:

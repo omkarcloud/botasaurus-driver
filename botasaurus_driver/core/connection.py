@@ -244,7 +244,7 @@ class Connection:
           raise           
         
         
-        result = wait_till_response_arrives(self.queue, tx_id , 40)
+        result = wait_till_response_arrives(self.queue, tx_id , 180)
         result = parse_response(result, cdp_obj)
 
         return result

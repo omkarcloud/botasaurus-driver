@@ -631,6 +631,8 @@ class DriverBase:
         if bypass_cloudflare:
             self.detect_and_bypass_cloudflare()
         block_if_should(self)
+    def reload(self):
+        self.get(self.current_url)
 
     def get_via(
         self,
@@ -1232,7 +1234,10 @@ class DriverBase:
 
 
 class IframeElement(DriverBase):
-    pass
+
+    @property
+    def iframe_url(self) -> Tab:
+        return self._tab_value.target.url
 
 
 class Driver(DriverBase):
@@ -1291,6 +1296,7 @@ class Driver(DriverBase):
                 ".jpg",
                 ".jpeg",
                 ".png",
+                ".webp",
                 ".svg",
                 ".gif",
                 ".woff",
@@ -1306,6 +1312,7 @@ class Driver(DriverBase):
                 ".jpg",
                 ".jpeg",
                 ".png",
+                ".webp",
                 ".svg",
                 ".gif",
                 ".woff",
