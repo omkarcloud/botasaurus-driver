@@ -256,6 +256,28 @@ class Tab(Connection):
                 self.sleep(0.5)
         return item
 
+    def click_at_point(self, x: int, y:int):
+            self.send(
+                cdp.input_.dispatch_mouse_event("mouseMoved", x=x, y=y)
+            )
+            time.sleep(0.07)
+            self.send(
+            cdp.input_.dispatch_mouse_event(
+                "mousePressed",
+                x=x,
+                y=y,
+                button=cdp.input_.MouseButton.LEFT,
+                click_count=1
+            )
+            )
+            time.sleep(0.09)
+            self.send (cdp.input_.dispatch_mouse_event(
+                "mouseReleased",
+                x=x,
+                y=y,
+                button=cdp.input_.MouseButton.LEFT,
+                click_count=1
+            ))
     def perform_get_element_at_point(self,x: int, y:int, raiseError = False):
         doc: cdp.dom.Node = self.send(cdp.dom.get_document(-1, True))
         # print(self.send(cdp.dom.get_node_for_location(x=x, y=y, include_user_agent_shadow_dom=False)))
@@ -350,6 +372,36 @@ class Tab(Connection):
 
         return results
 
+    def count_select(
+        self,
+        selector: str,
+        timeout: Union[int, float] = 10,
+        node_name = None,
+        _node: Optional[Union[cdp.dom.Node, element.Element]] = None,
+        
+    ):
+        """
+        find multiple elements by css selector.
+        can also be used to wait for such element to appear.
+
+        :param selector: css selector, eg a[href], button[class*=close], a > img[src]
+        :type selector: str
+        :param timeout: raise timeout exception when after this many seconds nothing is found.
+        :type timeout: float,int
+        """
+
+        now = time.time()
+        results = self.query_selector_count(selector, _node)
+        if timeout:
+            while not results:
+                results = self.query_selector_count(selector, _node)
+                if time.time() - now > timeout:
+                    return 0
+                self.sleep(0.5)
+        if not results:
+            return 0
+        return results
+
     def query_selector_all(
         self,
         selector: str,
@@ -416,6 +468,65 @@ class Tab(Connection):
             elem = element.create(node, self, doc)
             results.append(elem)
         return results
+
+    def query_selector_count(
+        self,
+        selector: str,
+        _node: Optional[Union[cdp.dom.Node, "element.Element"]] = None,
+    ):
+        """
+        equivalent of javascripts document.querySelectorAll.
+        this is considered one of the main methods to use in this package.
+
+
+        :param selector: css selector. (first time? => https://www.w3schools.com/cssref/css_selectors.php )
+        :type selector: str
+        :param _node: internal use
+        :type _node:
+        :return:
+        :rtype:
+        """
+
+        if not _node:
+            doc: cdp.dom.Node = self.send(cdp.dom.get_document(-1, True))
+        else:
+            doc = _node
+            if _node.node_name == "IFRAME":
+                doc = _node.content_document
+        node_ids = []
+
+        try:
+            node_ids = self.send(
+                cdp.dom.query_selector_all(doc.node_id, selector)
+            )
+            
+
+        except ChromeException as e:
+            is_no_node = "could not find node" in e.message.lower()
+            if _node is not None:
+                if is_no_node:
+                    if getattr(_node, "__last", None):
+                        del _node.__last
+                        return 0
+                    # if supplied node is not found, the dom has changed since acquiring the element
+                    # therefore we need to update our passed node and try again
+                    _node.update()
+                    _node.__last = (
+                        True  # make sure this isn't turned into infinite loop
+                    )
+                    return self.query_selector_count(selector, _node)
+            else:
+                # TODO: Why, i guess removable maybe
+                self.send(cdp.dom.disable())
+                if is_no_node:
+                    # simply means that doc was destroyed in navigation
+                    return 0  # Return 0 instead of an empty list
+                raise
+        if not node_ids:
+            return 0
+        else:
+            return len(node_ids)
+
 
     def query_selector(
         self,

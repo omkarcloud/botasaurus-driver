@@ -713,6 +713,11 @@ class DriverBase:
     def select(self, selector: str, wait: Optional[int] = Wait.SHORT) -> Element:
         elem = self._run(self._tab.select(selector, timeout=wait))
         return make_element(self, self._tab, elem) if elem else None
+    
+    def click_at_point(self, x: int, y:int):
+        self._run(self._tab.click_at_point(
+            x, y
+        ))
 
     def select_all(
         self, selector: str, wait: Optional[int] = Wait.SHORT
@@ -720,6 +725,13 @@ class DriverBase:
         elems_coro = self._tab.select_all(selector, timeout=wait)
         elems = self._run(elems_coro)
         return [make_element(self, self._tab, e) for e in elems]
+    
+    def count(
+        self, selector: str, wait: Optional[int] = Wait.SHORT
+    ) -> List[Element]:
+        elems_coro = self._tab.count_select(selector, timeout=wait)
+        return self._run(elems_coro)
+
 
     def select_iframe(
         self, selector: str, wait: Optional[int] = Wait.SHORT
