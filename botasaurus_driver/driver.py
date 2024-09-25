@@ -21,6 +21,7 @@ from .driver_utils import (
 )
 from .exceptions import (
     CheckboxElementForLabelNotFoundException,
+    DetachedElementException,
     ElementWithTextNotFoundException,
     IframeNotFoundException,
     InputElementForLabelNotFoundException,
@@ -41,6 +42,11 @@ class Wait:
     SHORT = 4
     LONG = 8
     VERY_LONG = 16
+def generate_random_string(length: int = 32) -> str:
+            import random
+            import string
+            letters = string.ascii_letters + string.digits
+            return ''.join(random.choice(letters) for i in range(length))
 
 
 def _get_iframe_tab(driver, internal_elem):
@@ -502,7 +508,15 @@ def get_for_input_selector(type, for_attr):
     else:
         return f"input[id='{for_attr}'], textarea[id='{for_attr}'], select[id='{for_attr}']"
 
-
+def get_title_safe(driver):
+        while True:
+            try:
+                el = driver.select("title", None)
+                if el:
+                    return el.text
+            except DetachedElementException:
+                print("Title element is detached, Regetting")
+                pass
 def get_input_el(driver, label, wait, type):
     els = driver.get_all_elements_containing_text(label, wait=wait)
     # Prioritize Label Elements
@@ -557,6 +571,7 @@ class DriverBase:
         self.config = config
         self._tab_value = _tab_value
         self._browser = _browser
+        self.native_fetch_name = None
 
     def _run(self, coro):
         return coro
@@ -585,9 +600,7 @@ class DriverBase:
 
     @property
     def title(self):
-        el = self.select("title", None)
-        if el:
-            return el.text
+        return get_title_safe(self)
 
     @property
     def page_text(self):
@@ -737,6 +750,11 @@ class DriverBase:
         
     def run_cdp_command(self, command) -> Any:
         return self._run(self._tab.run_cdp_command(command))
+    
+    def prevent_fetch_spying(self) -> Any:
+        rand = generate_random_string()
+        self.run_on_new_document(f"window.{rand} = window.fetch")
+        self.native_fetch_name = rand
 
     def open_in_devtools(self) -> None:
         self._tab.open_external_inspector()

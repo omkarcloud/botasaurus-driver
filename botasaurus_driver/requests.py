@@ -99,7 +99,7 @@ def _convert_to_requests_response(gr, raise_fetch_exception):
 
 
 template = r"""function fetchData(url) {
-  return fetch(url, {
+  return window.fetch(url, {
     "headers": {
         "priority": "u=0, i",
         "sec-fetch-dest": "document",
@@ -148,7 +148,7 @@ return fetchData("LINK")
 
 
 template_many = r"""function fetchData(url) {
-  return fetch(url, {
+  return window.fetch(url, {
     "headers": {
         "priority": "u=0, i",
         "sec-fetch-dest": "document",
@@ -202,7 +202,7 @@ return Promise.all(args['links'].map(fetchData)).catch(error => {
 
 template_many_simultaneous = r"""
 function fetchData(url) {
-    return fetch(url, {
+    return window.fetch(url, {
         "headers": {
             "priority": "u=0, i",
             "sec-fetch-dest": "document",
@@ -250,25 +250,30 @@ function fetchData(url) {
 
 
 async function worker(urls, responses, errors) {
+    let iterationCount = 0;
     while (urls.length > 0) {
-        const url = urls.pop() // Get a link from the list
-        const response = await fetchData(url) // Fetch the URL
+        const url = urls.pop(); // Get a link from the list
+        const response = await fetchData(url); // Fetch the URL
 
-        const isSucess = response.status_code === 200 || response.status_code === 404
-        const hasNoRequestError = !response.error
-        const isValidResponse = isSucess && hasNoRequestError
+        const isSucess = response.status_code === 200 || response.status_code === 404;
+        const hasNoRequestError = !response.error;
+        const isValidResponse = isSucess && hasNoRequestError;
         if (isValidResponse) {
-            responses.push(response) // Append if status is 200 or 404
+            responses.push(response); // Append if status is 200 or 404
             if (args['wait']) {
-                await new Promise(resolve => setTimeout(resolve, args['wait'] * 1000))
+                await new Promise(resolve => setTimeout(resolve, args['wait'] * 1000));
             }
         } else {
             // If it's some other status, append to errors
-            errors.push(url)
-            return
+            errors.push(url);
+            return;
         }
+
+        iterationCount++;
+
     }
 }
+
 
 async function runWorkers(urls, workerCount) {
     const responses = []
@@ -279,10 +284,10 @@ async function runWorkers(urls, workerCount) {
     for (let i = 0; i < workerCount; i++) {
         workers.push(worker(urls, responses, errors))
     }
-    console.log('waiting')
+    // console.log('waiting')
     // Wait for all workers to complete
     await Promise.all(workers)
-    console.log('done')
+    // console.log('done')
 
     // Add any remaining URLs to the error list (if workers exit prematurely)
 
@@ -306,6 +311,13 @@ def calculate_number_of_workers(urls, parallel):
             n = min(len(urls), int(number_of_workers))
         return n
 
+def run_js_with_args(driver, fetchcode, args):
+        if driver.native_fetch_name:
+             fetchcode = fetchcode.replace("fetch(", driver.native_fetch_name + "(")
+        else:
+            print("To prevent custom fetch request detection, please call driver.prevent_fetch_spying() before visiting any page.")
+        return driver.run_js(fetchcode, args)
+
 class Request():
     def __init__(self, driver):
         self.driver = driver
@@ -327,7 +339,7 @@ class Request():
               raise TypeError("referer must be a string.")
             fetchcode = fetchcode.replace("REF", referer)
 
-        data = self.driver.run_js(fetchcode, headers)
+        data = run_js_with_args(self.driver, fetchcode, headers)
         if data['error']:
             raise DriverException(data['error'])
         
@@ -351,7 +363,7 @@ class Request():
               raise TypeError("referer must be a string.")
             fetchcode = fetchcode.replace("REF", referer)
         args['links'] = urls
-        data = self.driver.run_js(fetchcode, args)
+        data = run_js_with_args(self.driver,fetchcode, args)
 
         if isinstance(data, dict) and data['error']:
           raise DriverException(data['error'])
@@ -383,11 +395,10 @@ class Request():
         args['workers'] = n
         args['wait'] = request_interval
 
-        print('started')        
-        data = self.driver.run_js(fetchcode, args)
-        print('ended')        
+        data = run_js_with_args(self.driver,fetchcode, args)
 
         responses = [_convert_to_requests_response(x, False) for x in data['responses']]
         errors_links  = data['errors_links']
         return responses, errors_links
+
 

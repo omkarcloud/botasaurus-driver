@@ -672,7 +672,13 @@ class Element:
             raise DetachedElementException()
 
     def is_disconnected(self):
-        return self.apply('(el)=>!el.isConnected')
+        try:
+          return self.apply('(el)=>!el.isConnected')
+        except Exception as e:
+          if "Node with given id does not belong to the document" in str(e):
+              return True
+          raise 
+        
 
     def send_keys(self, text: str):
         """

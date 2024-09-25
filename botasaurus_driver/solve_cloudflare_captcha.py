@@ -208,9 +208,7 @@ def solve_widget_cf(driver):
 
 def bypass_if_detected(driver, ):
     opponent = driver.get_bot_detected_by()
-
     if opponent == Opponent.CLOUDFLARE:
-        driver.prompt()
         if driver.select('script[data-cf-beacon]', None):
             solve_widget_cf(driver)
         else:
