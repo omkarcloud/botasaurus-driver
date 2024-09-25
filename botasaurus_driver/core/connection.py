@@ -120,26 +120,33 @@ class Connection:
         :param kw:
         :return:
         """
-
         # if not self.websocket or self.websocket.closed:
         if not self.websocket :
             try:
-                self.websocket = websocket.WebSocketApp(self.websocket_url)
-                self.listener = Listener(self)
-                self.listener.connected_event.wait()
+                self.reconnect_websocket()
+                self.listener = Listener(self, self.reconnect_websocket)
+                self.wait_for_socket_connection()
             except (Exception,) as e:
                 if self.listener:
                     self.listener.cancel_event.set()
                 raise
         if not self.listener or not self.listener.running:
-            self.listener = Listener(self)
-            self.listener.connected_event.wait()
+            self.reconnect_websocket()
+            self.listener = Listener(self, self.reconnect_websocket)
+            self.listener.connected_event.wait(timeout=30)
 
         # when a websocket connection is closed (either by error or on purpose)
         # and reconnected, the registered event listeners (if any), should be
         # registered again, so the browser sends those events
 
         self._register_handlers()
+
+    def wait_for_socket_connection(self):
+        self.listener.connected_event.wait(timeout=30)
+
+    def reconnect_websocket(self):
+        self.close_socket_if_possible()
+        self.websocket = websocket.WebSocketApp(self.websocket_url)
 
     def close(self):
         """
@@ -153,6 +160,9 @@ class Connection:
                 self.enabled_domains.clear()
                 self.listener = None
             
+        self.close_socket_if_possible()
+
+    def close_socket_if_possible(self):
         if self.websocket:
             self.websocket.close()
             self.websocket = None
@@ -229,7 +239,7 @@ class Connection:
         if not self.websocket or self.closed:
             return
         if not self.listener or not self.listener.running:
-            self.listener = Listener(self)
+            self.listener = Listener(self, self.reconnect_websocket)
         
         tx_id = next(self.__count__)
         tx  = make_request_body(id=tx_id, cdp_obj = cdp_obj)
@@ -244,7 +254,7 @@ class Connection:
           raise           
         
         
-        result = wait_till_response_arrives(self.queue, tx_id , 180)
+        result = wait_till_response_arrives(self.queue, tx_id , 3000)
         result = parse_response(result, cdp_obj)
 
         return result
@@ -302,8 +312,10 @@ class Connection:
 
 
 class Listener:
-    def __init__(self, connection: Connection):
+    def __init__(self, connection: Connection, reconnect_ws):
         self.connection = connection
+        self.reconnect_ws = reconnect_ws
+        
         self.task: threading.Thread = None
 
         # when in interactive mode, the loop is paused after each return
@@ -348,6 +360,9 @@ class Listener:
 
     def listener_loop(self):
         while not self.cancel_event.is_set():
+            while not self.connection.websocket:
+                self.reconnect_ws()
+
             ws = self.connection.websocket
             def on_message(ws, message):
                 message = json.loads(message)

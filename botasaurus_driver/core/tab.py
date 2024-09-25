@@ -302,7 +302,6 @@ class Tab(Connection):
 
     def get_element_at_point(self,x: int, y:int, timeout: Optional[int] = None):
         now = time.time()
-
         results = self.perform_get_element_at_point(x,y)
         if timeout:
             while not results:

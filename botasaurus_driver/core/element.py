@@ -413,6 +413,40 @@ class Element:
             button=cdp.input_.MouseButton.LEFT,
             click_count=1
         ))
+    def press_and_hold(self, wait):
+        """
+        Click the element.
+
+        :return:
+        :rtype:
+        """
+        self.raise_if_disconnected()
+
+        center = self.get_position().center
+        # a bit off for better humaness
+        x = center[0] - 33
+        y = center[1] - 20
+        self._tab.send(
+            cdp.input_.dispatch_mouse_event("mouseMoved", x=x, y=y)
+        )
+        time.sleep(0.07)
+        self._tab.send(
+           cdp.input_.dispatch_mouse_event(
+            "mousePressed",
+            x=x,
+            y=y,
+            button=cdp.input_.MouseButton.LEFT,
+            click_count=1
+        )
+        )
+        time.sleep(wait)
+        self._tab.send (cdp.input_.dispatch_mouse_event(
+            "mouseReleased",
+            x=x,
+            y=y,
+            button=cdp.input_.MouseButton.LEFT,
+            click_count=1
+        ))        
 
     def click(self):
         """

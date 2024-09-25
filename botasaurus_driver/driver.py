@@ -7,6 +7,7 @@ from typing import Optional, Union, List, Any
 from .core.config import Config
 from .core.custom_storage_cdp import block_urls, enable_network
 from .tiny_profile import load_cookies, save_cookies
+from . import cdp
 
 from .beep_utils import beep_input
 from .driver_utils import (
@@ -103,7 +104,6 @@ def matches_regex(s, pattern):
 
 def _perform_get_frame(driver, link):
     all_targets = driver._browser.targets
-
     for tgt in all_targets:
         if str(tgt.target.type_) == "iframe":
             if link:
@@ -260,6 +260,14 @@ class Element:
             self.wait_for_element(selector, wait).humane_click()
         else:
             self._tab._run(self._elem.humane_click())
+
+    # def press_and_hold(
+    #     self, selector: Optional[str] = None, wait: Optional[int] = Wait.SHORT
+    # ) -> None:
+    #     if selector:
+    #         self.wait_for_element(selector, wait).press_and_hold()
+    #     else:
+    #         self._tab._run(self._elem.press_and_hold())            
 
     def type(
         self,
@@ -624,13 +632,24 @@ class DriverBase:
     def _update_targets(self):
         return self._run(self._browser.update_targets())
 
-    def get(self, link: str, bypass_cloudflare=False, wait: Optional[int] = None):
+    def get(self, link: str, bypass_cloudflare=False, wait: Optional[int] = None) -> Tab:
         self._tab = self._run(self._browser.get(link))
         self.sleep(wait)
         wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load)
         if bypass_cloudflare:
             self.detect_and_bypass_cloudflare()
         block_if_should(self)
+        return self._tab
+
+    def open_link_in_new_tab(self, link: str, bypass_cloudflare=False, wait: Optional[int] = None) -> Tab:
+        self._tab = self._run(self._browser.get(link, new_tab=True))
+        self.sleep(wait)
+        wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load)
+        if bypass_cloudflare:
+            self.detect_and_bypass_cloudflare()
+        block_if_should(self)
+        return self._tab
+        
     def reload(self):
         self.get(self.current_url)
 
@@ -640,7 +659,7 @@ class DriverBase:
         referer: str,
         bypass_cloudflare=False,
         wait: Optional[int] = None,
-    ):
+    ) -> Tab:
 
         referer = referer.rstrip("/") + "/"
         self._tab = self._run(self._browser.get(link, referrer=referer))
@@ -652,6 +671,7 @@ class DriverBase:
         if bypass_cloudflare:
             self.detect_and_bypass_cloudflare()
         block_if_should(self)
+        return self._tab
 
     def google_get(
         self,
@@ -659,7 +679,7 @@ class DriverBase:
         bypass_cloudflare=False,
         wait: Optional[int] = None,
         accept_google_cookies: bool = False,
-    ):
+    ) -> Tab:
         if accept_google_cookies:
             # No need to accept cookies multiple times
             if (
@@ -677,10 +697,11 @@ class DriverBase:
             bypass_cloudflare=bypass_cloudflare,
             wait=wait,
         )
+        return self._tab
 
     def get_via_this_page(
         self, link: str, bypass_cloudflare=False, wait: Optional[int] = None
-    ):
+    ) -> Tab:
         currenturl = self.current_url
         self.run_js(f'window.location.href = "{link}";')
         if currenturl != link:
@@ -696,11 +717,24 @@ class DriverBase:
             self.detect_and_bypass_cloudflare()
 
         block_if_should(self)
+        return self._tab
+
+    def switch_to_tab(
+        self, tab: Tab
+    ) -> Tab:
+        self._tab = tab
 
     def run_js(self, script: str, args: Optional[any]=None) -> Any:
         # Run it in IIFE for isloation
         return self._run(self._tab.evaluate(script,args=args,await_promise=True))
 
+    def run_on_new_document(
+        self, script
+    ) -> None:
+        self.run_cdp_command(cdp.page.enable())
+        return self.run_cdp_command(cdp.page.add_script_to_evaluate_on_new_document(script))
+        # self.run_cdp_command(cdp.page.add_script_to_evaluate_on_load(script))
+        
     def run_cdp_command(self, command) -> Any:
         return self._run(self._tab.run_cdp_command(command))
 
@@ -828,6 +862,10 @@ class DriverBase:
         elem = self.wait_for_element(selector, wait)
         elem.humane_click()
 
+    # def press_and_hold(self, selector: str, wait: Optional[int] = Wait.SHORT) -> None:
+    #     elem = self.wait_for_element(selector, wait)
+    #     elem.press_and_hold()
+
     def click_element_containing_text(
         self, text: str, wait: Optional[int] = Wait.SHORT
     ) -> None:
@@ -851,9 +889,7 @@ class DriverBase:
         else:
             raise InputElementForLabelNotFoundException(label)
 
-    # def clear(self, selector: str, wait: Optional[int] = Wait.SHORT) -> None:
-    #     elem = self.wait_for_element(selector, wait)
-    #     elem.clear()
+
 
     def check_element(self, selector: str, wait: Optional[int] = Wait.SHORT) -> None:
         elem = self.wait_for_element(selector, wait)
