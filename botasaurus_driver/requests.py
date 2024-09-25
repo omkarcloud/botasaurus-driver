@@ -98,7 +98,7 @@ def _convert_to_requests_response(gr, raise_fetch_exception):
           raise
 
 
-template = """function fetchData(url) {
+template = r"""function fetchData(url) {
   return fetch(url, {
     "headers": {
         "priority": "u=0, i",
@@ -147,7 +147,7 @@ return fetchData("LINK")
 """
 
 
-template_many = """function fetchData(url) {
+template_many = r"""function fetchData(url) {
   return fetch(url, {
     "headers": {
         "priority": "u=0, i",
@@ -200,6 +200,112 @@ return Promise.all(args['links'].map(fetchData)).catch(error => {
   })
 """
 
+template_many_simultaneous = r"""
+function fetchData(url) {
+    return fetch(url, {
+        "headers": {
+            "priority": "u=0, i",
+            "sec-fetch-dest": "document",
+            "sec-fetch-mode": "navigate",
+            "sec-fetch-site": "same-origin",
+            "sec-fetch-user": "?1",
+            "upgrade-insecure-requests": "1",
+            ...args['headers'],
+        },
+        "referrer": "REF",
+        "referrerPolicy": "strict-origin-when-cross-origin",
+        "body": null,
+        "method": "GET",
+        "mode": "cors",
+        "credentials": "include"
+    })
+        .then(response => {
+            return response.text().then(text => ({
+                error: null,
+                status_code: response.status,
+                status_message: response.statusText,
+                result: text,
+                headers: [...response.headers.entries()].reduce((acc, [key, value]) => {
+                    acc[key] = value
+                    return acc
+                }, {}),
+                final_url: response.url,
+                request_url: url,
+                cookies: document.cookie.split(';').reduce((cookies, cookie) => {
+                    const [name, value] = cookie.split('=').map(c => c.trim())
+                    return { ...cookies, [name]: value }
+                }, {}),
+            }))
+        })
+        .catch(error => {
+            return {
+                final_url: url,
+                request_url: url,
+                error: error.toString(),
+                // result: error.message,
+            }
+        })
+}
+
+
+
+async function worker(urls, responses, errors) {
+    while (urls.length > 0) {
+        const url = urls.pop() // Get a link from the list
+        const response = await fetchData(url) // Fetch the URL
+
+        const isSucess = response.status_code === 200 || response.status_code === 404
+        const hasNoRequestError = !response.error
+        const isValidResponse = isSucess && hasNoRequestError
+        if (isValidResponse) {
+            responses.push(response) // Append if status is 200 or 404
+            if (args['wait']) {
+                await new Promise(resolve => setTimeout(resolve, args['wait'] * 1000))
+            }
+        } else {
+            // If it's some other status, append to errors
+            errors.push(url)
+            return
+        }
+    }
+}
+
+async function runWorkers(urls, workerCount) {
+    const responses = []
+    const errors = []
+    const workers = []
+
+    // Create workers and run them in parallel
+    for (let i = 0; i < workerCount; i++) {
+        workers.push(worker(urls, responses, errors))
+    }
+    console.log('waiting')
+    // Wait for all workers to complete
+    await Promise.all(workers)
+    console.log('done')
+
+    // Add any remaining URLs to the error list (if workers exit prematurely)
+
+    if (urls.length) {
+        errors.push(...urls)
+    }
+
+    return { responses, errors_links: errors }
+}
+
+return runWorkers(args['links'], args['workers'])
+"""
+
+def calculate_number_of_workers(urls, parallel):
+        number_of_workers = parallel
+        has_number_of_workers = number_of_workers is not None and not (number_of_workers == False)
+        
+        if not has_number_of_workers or number_of_workers <= 1:
+            n = 1
+        else:
+            n = min(len(urls), int(number_of_workers))
+        return n
+
 class Request():
     def __init__(self, driver):
         self.driver = driver
@@ -251,3 +357,37 @@ class Request():
           raise DriverException(data['error'])
         
         return [_convert_to_requests_response(x, False) for x in data]
+
+
+    def get_many_simultaneous(self, urls, parallel=10, request_interval=None, headers=None, referer=None,):
+        fetchcode = template_many_simultaneous
+        args = {}
+        if headers is None:
+            fetchcode = fetchcode.replace("...args['headers'],", "")
+        else:
+            if not isinstance(headers, dict):
+              raise TypeError("Headers must be a dictionary.")
+            args = {"headers":headers}
+        
+        if referer is None:
+            fetchcode = fetchcode.replace('"referrer": "REF",', "")
+        else:
+            if not isinstance(referer, str):
+              raise TypeError("referer must be a string.")
+            fetchcode = fetchcode.replace("REF", referer)
+        
+        # await new Promise(resolve => setTimeout(resolve, args['wait'] * 1000))
+        n = calculate_number_of_workers(urls, parallel)
+
+        args['links'] = urls
+        args['workers'] = n
+        args['wait'] = request_interval
+
+        print('started')        
+        data = self.driver.run_js(fetchcode, args)
+        print('ended')        
+
+        responses = [_convert_to_requests_response(x, False) for x in data['responses']]
+        errors_links  = data['errors_links']
+        return responses, errors_links
+
