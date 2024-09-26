@@ -547,30 +547,37 @@ class Element:
     CORE
     return JSON.stringify({ "x": resp });
     }""".replace("CORE", core)
-        self._remote_object = self._tab.send(
-            cdp.dom.resolve_node(backend_node_id=self.backend_node_id)
-        )
-        result = self._tab.send(
-            cdp.runtime.call_function_on(
-                js_function,
-                object_id=self._remote_object.object_id,
-                arguments=[
-                    cdp.runtime.CallArgument(
-                        object_id=self._remote_object.object_id
-                    )
-                ],
-                return_by_value=True,
-                user_gesture=True,
+
+        try:
+
+            self._remote_object = self._tab.send(
+                cdp.dom.resolve_node(backend_node_id=self.backend_node_id)
             )
-        )
+            result = self._tab.send(
+                cdp.runtime.call_function_on(
+                    js_function,
+                    object_id=self._remote_object.object_id,
+                    arguments=[
+                        cdp.runtime.CallArgument(
+                            object_id=self._remote_object.object_id
+                        )
+                    ],
+                    return_by_value=True,
+                    user_gesture=True,
+                )
+            )
 
-        if result and result[0]:
-            if return_by_value:
-                return json.loads(util.get_remote_object_value(result[0], core)).get("x")
-            return json.loads(result[0]).get("x")
-        elif result[1]:
-            return json.loads(result[1]).get("x")
+            if result and result[0]:
+                if return_by_value:
+                    return json.loads(util.get_remote_object_value(result[0], core)).get("x")
+                return json.loads(result[0]).get("x")
+            elif result[1]:
+                return json.loads(result[1]).get("x")
 
+        except Exception as e:
+          if self.is_disconnected_error(e):
+              raise DetachedElementException()
+          raise
     def get_position(self, abs=False):
         self.raise_if_disconnected()
 
@@ -671,13 +678,19 @@ class Element:
         if response:
             raise DetachedElementException()
 
-    def is_disconnected(self):
+    def is_disconnected(self):        
         try:
           return self.apply('(el)=>!el.isConnected')
         except Exception as e:
-          if "Node with given id does not belong to the document" in str(e):
+          if self.is_disconnected_error(e):
               return True
           raise 
+
+    def is_disconnected_error(self, e):
+        msg = str(e).lower()
+        if "node with given id" in msg or "cannot find context with" in msg :
+            return True
+        return False
         
 
     def send_keys(self, text: str):

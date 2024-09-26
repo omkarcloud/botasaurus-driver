@@ -264,13 +264,14 @@ async function worker(urls, responses, errors) {
                 await new Promise(resolve => setTimeout(resolve, args['wait'] * 1000));
             }
         } else {
-            // If it's some other status, append to errors
             errors.push(url);
-            return;
+            if (response.error) {
+                // Request Error Only, We can continue
+            } else {
+                return;
+            }
         }
-
         iterationCount++;
-
     }
 }
 
@@ -316,7 +317,15 @@ def run_js_with_args(driver, fetchcode, args):
              fetchcode = fetchcode.replace("fetch(", driver.native_fetch_name + "(")
         else:
             print("To prevent custom fetch request detection, please call driver.prevent_fetch_spying() before visiting any page.")
-        return driver.run_js(fetchcode, args)
+        
+        try:
+          return driver.run_js(fetchcode, args)
+        except Exception as e:
+          if "Inspected target navigated or closed" in str(e):
+            print("The page was closed or navigated away, Retrying")
+            return run_js_with_args(driver, fetchcode, args)
+          raise
+        
 
 class Request():
     def __init__(self, driver):

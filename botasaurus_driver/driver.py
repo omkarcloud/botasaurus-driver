@@ -45,7 +45,7 @@ class Wait:
 def generate_random_string(length: int = 32) -> str:
             import random
             import string
-            letters = string.ascii_letters + string.digits
+            letters = string.ascii_letters
             return ''.join(random.choice(letters) for i in range(length))
 
 
@@ -488,7 +488,12 @@ class Element:
 
     def run_js(self, script: str, args: Optional[any]=None) -> Any:
         self._tab._run(self._elem.raise_if_disconnected())
-        return self._tab._run(self._elem.apply(script,args=args,))
+
+        try:
+          return self._tab._run(self._elem.apply(script,args=args,))
+        except Exception as e:
+          print('An exception occurred')
+        
 
 
 def get_inside_input_selector(type):
