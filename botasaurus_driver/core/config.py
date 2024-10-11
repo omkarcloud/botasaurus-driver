@@ -193,9 +193,9 @@ class Config:
         # other keyword args will be accessible by attribute
         super().__init__()
         self.default_arguments = [
+            # "--disable-site-isolation-trials",
             "--start-maximized",
             "--no-first-run",
-            # "--disable-site-isolation-trials",
             "--disable-backgrounding-occluded-windows",
             "--disable-hang-monitor",
             "--metrics-recording-only",

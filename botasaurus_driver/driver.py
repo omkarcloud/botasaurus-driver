@@ -706,9 +706,12 @@ class DriverBase:
             ):
                 pass
             else:
-                self.has_accepted_google_cookies = True
                 self.get("https://www.google.com/")
-                perform_accept_google_cookies_action(self)
+                if '/sorry/' in self.current_url:
+                    print('Blocked by Google')
+                else:
+                    perform_accept_google_cookies_action(self)
+                    self.has_accepted_google_cookies = True
         self.get_via(
             link,
             "https://www.google.com/",
