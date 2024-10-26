@@ -517,8 +517,11 @@ def get_title_safe(driver):
         while True:
             try:
                 el = driver.select("title", None)
-                if el:
+                if el is not None:
                     return el.text
+                else:
+                    return driver.run_js("return document.title")
+                
             except DetachedElementException:
                 print("Title element is detached, Regetting")
                 pass
