@@ -10,7 +10,7 @@ def get_description():
 
 setup(
     name="botasaurus_driver",
-    version='4.0.59',
+    version='4.0.66',
     description="Super Fast, Super Anti-Detect, and Super Intuitive Web Driver",
     long_description_content_type="text/markdown",
     long_description=get_description(),

@@ -316,7 +316,9 @@ def run_js_with_args(driver, fetchcode, args):
         if driver.native_fetch_name:
              fetchcode = fetchcode.replace("fetch(", driver.native_fetch_name + "(")
         else:
-            print("To prevent custom fetch request detection, please call driver.prevent_fetch_spying() before visiting any page.")
+            # Not needed
+            # print("To prevent custom fetch request detection, please call driver.prevent_fetch_spying() before visiting any page.")
+            pass
         
         try:
           return driver.run_js(fetchcode, args)

@@ -37,47 +37,55 @@ is_posix = sys.platform.startswith(("darwin", "cygwin", "linux", "linux2"))
 PathLike = str
 AUTO = None
 
+
 def free_port() -> int:
     """Get free port."""
     sock = socket.socket()
-    sock.bind(('localhost', 0))
+    sock.bind(("localhost", 0))
     port = sock.getsockname()[1]
     sock.close()
     del sock
     gc.collect()
     return port
 
+
 def clean_profile(profile):
-            if profile:
-                return str(profile).strip()
+    if profile:
+        return str(profile).strip()
+
 
 def should_force_headless():
     return is_vmish
 
+
 def should_force_no_sandbox():
     return is_docker
+
 
 def unique_keys(all_urls):
     return list(dict.fromkeys(all_urls))
 
+
 def create_local_proxy(auth_proxy):
     from botasaurus_proxy_authentication import create_proxy
+
     return create_proxy(auth_proxy)
+
 
 def close_local_proxy(local_proxy):
     from botasaurus_proxy_authentication import close_proxy
+
     return close_proxy(local_proxy)
 
+
 def create_extensions_string(extensions):
-            if not isinstance(extensions, list):
-                extensions = [extensions]
-            extensions_str = ",".join(
-                [
-                    extension.load(with_command_line_option=False)
-                    for extension in extensions
-                ]
-            )
-            return "--load-extension=" + extensions_str
+    if not isinstance(extensions, list):
+        extensions = [extensions]
+    extensions_str = ",".join(
+        [extension.load(with_command_line_option=False) for extension in extensions]
+    )
+    return "--load-extension=" + extensions_str
+
 
 def add_essential_options(options, profile, window_size, user_agent):
 
@@ -86,21 +94,25 @@ def add_essential_options(options, profile, window_size, user_agent):
 
         if user_agent == UserAgent.RANDOM:
             if profile is not None:
-                raise DriverException("When working with profiles, the user_agent must remain consistent and be generated based on the profile's unique hash. Instead of using a Random User Agent, use user_agent=UserAgent.HASHED.")
-            else:            
+                raise DriverException(
+                    "When working with profiles, the user_agent must remain consistent and be generated based on the profile's unique hash. Instead of using a Random User Agent, use user_agent=UserAgent.HASHED."
+                )
+            else:
                 user_agent = UserAgentInstance.get_random()
         elif user_agent == UserAgent.HASHED:
             user_agent = UserAgentInstance.get_hashed(profile)
         else:
             user_agent = user_agent
 
-        options.add_argument(f'--user-agent={user_agent}')    
+        options.add_argument(f"--user-agent={user_agent}")
     if window_size and window_size != "REAL":
         from ..window_size import WindowSizeInstance, WindowSize
 
         if window_size == WindowSize.RANDOM:
             if profile is not None:
-                raise DriverException("When working with profiles, the window_size must remain consistent and be generated based on the profile's unique hash. Instead of using a Random Window Size, use window_size=WindowSize.HASHED.")
+                raise DriverException(
+                    "When working with profiles, the window_size must remain consistent and be generated based on the profile's unique hash. Instead of using a Random Window Size, use window_size=WindowSize.HASHED."
+                )
             else:
                 window_size = WindowSizeInstance.get_random()
         elif window_size == WindowSize.HASHED:
@@ -134,37 +146,36 @@ class Config:
         beep=False,
     ):
         if tiny_profile and profile is None:
-            raise ValueError('Profile must be given when using tiny profile')
+            raise ValueError("Profile must be given when using tiny profile")
 
-        self.headless=headless
-        self.proxy=proxy
+        self.headless = headless
+        self.proxy = proxy
 
         if self.proxy:
             self.local_proxy = create_local_proxy(self.proxy)
         else:
             self.local_proxy = None
 
-        self.profile=clean_profile(profile)
-        self.tiny_profile=tiny_profile
+        self.profile = clean_profile(profile)
+        self.tiny_profile = tiny_profile
 
-        self.block_images=block_images
-        self.block_images_and_css=block_images_and_css
+        self.block_images = block_images
+        self.block_images_and_css = block_images_and_css
 
-        self.wait_for_complete_page_load=wait_for_complete_page_load
+        self.wait_for_complete_page_load = wait_for_complete_page_load
 
-        self.extensions=extensions
+        self.extensions = extensions
 
-        self.arguments= arguments if arguments else []
+        self.arguments = arguments if arguments else []
 
-        self.user_agent=user_agent
-        self.window_size=window_size
+        self.user_agent = user_agent
+        self.window_size = window_size
 
-        self.lang=lang
-        self.beep=beep
+        self.lang = lang
+        self.beep = beep
 
         self.host = "127.0.0.1"
         self.port = free_port()
-        
 
         if self.tiny_profile or not self.profile:
             self.profile_directory = temp_profile_dir(str(self.port) + "_")
@@ -173,15 +184,13 @@ class Config:
             self.profile_directory = convert_to_absolute_profile_path(self.profile)
             self.is_temporary_profile = False
 
-
-
         self.browser_executable_path = find_chrome_executable()
 
         self.autodiscover_targets = True
-        
+
         # Botasaurus Retry Data
         self.is_new = True
-        
+
         self.retry_attempt = 0
         self.is_retry = False
         self.is_last_retry = False
@@ -193,35 +202,7 @@ class Config:
         # other keyword args will be accessible by attribute
         super().__init__()
         self.default_arguments = [
-            # "--disable-site-isolation-trials",
-            "--start-maximized",
-            "--no-first-run",
-            "--disable-backgrounding-occluded-windows",
-            "--disable-hang-monitor",
-            "--metrics-recording-only",
-            "--disable-sync",
-            "--disable-background-timer-throttling",
-            "--disable-prompt-on-repost",
-            "--disable-background-networking",
-            "--disable-infobars",
-            "--remote-allow-origins=*",
-            "--homepage=about:blank",
-            "--no-service-autorun",
-            "--disable-ipc-flooding-protection",
-            "--disable-session-crashed-bubble",
-            "--force-fieldtrials=*BackgroundTracing/default/",
-            "--disable-breakpad",
-            "--password-store=basic",
-            "--disable-features=IsolateOrigins,site-per-process",
-            "--disable-client-side-phishing-detection",
-            "--use-mock-keychain",
-            "--no-pings",
-            "--disable-renderer-backgrounding",
-            "--disable-component-update",
-            "--disable-dev-shm-usage",
-            "--disable-default-apps",
-            "--disable-domain-reliability",
-            "--no-default-browser-check",
+            
         ]
 
     @property
@@ -240,7 +221,8 @@ class Config:
 
     def __call__(self):
         args = self.default_arguments
-        args.append ("--user-data-dir=%s" % self.profile_directory)
+        user_dr = "--user-data-dir=%s" % self.profile_directory
+        args.append(user_dr)
 
         if self.arguments:
             args.extend(self.arguments)
@@ -248,40 +230,107 @@ class Config:
 
         if self.headless:
             args.append("--headless=new")
-        else: 
+        else:
             if is_vmish:
                 from pyvirtualdisplay import Display
-                
+
                 try:
-                  self._display = Display(visible=False, size=(1920, 1080))
-                  self._display.start()
+                    self._display = Display(visible=False, size=(1920, 1080))
+                    self._display.start()
                 except FileNotFoundError:
-                  print('To run in headfull mode, You need to install Xvfb. Please run "sudo apt-get install xvfb" in your terminal. (We are currently running in headless mode)')
-                  args.append("--headless=new")
-                
+                    print(
+                        'To run in headfull mode, You need to install Xvfb. Please run "sudo apt-get install xvfb" in your terminal. (We are currently running in headless mode)'
+                    )
+                    args.append("--headless=new")
+
         if should_force_no_sandbox():
             args.append("--no-sandbox")
 
         if self.host:
-            args.append("--remote-debugging-host=%s" % self.host)
+            host_str = "--remote-debugging-host=%s" % self.host
+            args.append(host_str)
 
         if self.port:
-            args.append("--remote-debugging-port=%s" % self.port)
+            port_str = "--remote-debugging-port=%s" % self.port
+            args.append(port_str)
 
         if self.lang:
-            args.append(f'--lang={self.lang}')
+            args.append(f"--lang={self.lang}")
 
         if self.extensions:
             args.append(create_extensions_string(self.extensions))
 
         if self.local_proxy:
-            args.append(f'--proxy-server=' + self.local_proxy)
+            args.append(f"--proxy-server=" + self.local_proxy)
 
         args = unique_keys(args)
-        return args
+
+        return [
+            # "--disable-background-timer-throttling",
+            # "--disable-client-side-phishing-detection",
+            # "--disable-default-apps",
+            # "--disable-domain-reliability",
+            # "--disable-hang-monitor",
+            # "--disable-ipc-flooding-protection",
+            # "--disable-prompt-on-repost",
+            # "--disable-sync",
+            # "--force-fieldtrials=*BackgroundTracing/default/",
+            # "--metrics-recording-only",
+            "--remote-allow-origins=*",
+            # "--start-maximized",
+            # "--use-mock-keychain",
+# # ---
+#             "--disable-background-networking",
+            
+#             "--disable-backgrounding-occluded-windows",
+#             "--disable-breakpad",
+#             "--disable-component-update",
+#             "--disable-dev-shm-usage",
+#             "--disable-features=IsolateOrigins,site-per-process",
+#             "--disable-infobars",
+#             "--disable-renderer-backgrounding",
+#             "--disable-search-engine-choice-screen",
+#             "--disable-session-crashed-bubble",
+            
+#             "--disable-session-crashed-bubble",
+            # "--homepage=about:blank",
+
+            # "--no-default-browser-check",
+            "--no-first-run",
+            # "--no-pings",
+            # "--no-service-autorun",
+            # "--password-store=basic",
+            user_dr,
+            host_str,
+            port_str,
+        ]
+        # return [
+        #     "--disable-background-networking",
+        #     "--disable-backgrounding-occluded-windows",
+        #     "--disable-breakpad",
+        #     "--disable-component-update",
+        #     "--disable-dev-shm-usage",
+        #     "--disable-features=IsolateOrigins,site-per-process",
+        #     # "--disable-features=IsolateOrigins,site-per-process",
+        #     "--disable-infobars",
+        #     "--disable-renderer-backgrounding",
+        #     "--disable-search-engine-choice-screen",
+        #     "--disable-session-crashed-bubble",
+        #     "--disable-session-crashed-bubble",
+        #     "--homepage=about:blank",
+        #     "--no-default-browser-check",
+        #     "--no-first-run",
+        #     "--no-pings",
+        #     "--no-service-autorun",
+        #     "--password-store=basic",
+        #     user_dr,
+        #     host_str,
+        #     port_str,
+        # ]
+        # return args
 
     def add_argument(self, arg: str):
-       
+
         self.arguments.append(arg)
 
     def __repr__(self):
@@ -306,7 +355,7 @@ class Config:
 
 def get_linux_executable_path():
     import shutil
-    
+
     for executable in (
         "google-chrome",
         "google-chrome-stable",
@@ -319,48 +368,52 @@ def get_linux_executable_path():
         if path is not None:
             return path
 
-    raise FileNotFoundError("You don't have Google Chrome installed on your Linux system. Please install it by visiting https://www.google.com/chrome/.")
+    raise FileNotFoundError(
+        "You don't have Google Chrome installed on your Linux system. Please install it by visiting https://www.google.com/chrome/."
+    )
+
 
 def find_chrome_executable(return_all=False):
     """
     Determines the path to the Google Chrome executable on the system based on the platform.
-    
+
     :return: Full path to the Google Chrome executable if found, otherwise None.
     """
     if sys.platform.startswith("linux"):
-        return get_linux_executable_path()  # This function already exists in your code and finds Chrome on Linux.
+        return (
+            get_linux_executable_path()
+        )  # This function already exists in your code and finds Chrome on Linux.
     elif sys.platform.startswith("darwin"):
         possible_paths = [
-                "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
         ]
         for path in possible_paths:
             if os.path.isfile(path):
                 return path
-        
-        raise FileNotFoundError("You don't have Google Chrome installed on your MacOS. Please install it by visiting https://www.google.com/chrome/.")
+
+        raise FileNotFoundError(
+            "You don't have Google Chrome installed on your MacOS. Please install it by visiting https://www.google.com/chrome/."
+        )
         # Path for Google Chrome on macOS.
     elif sys.platform.startswith("win"):
         PROGRAMFILES = f"{os.environ.get('PROGRAMW6432') or os.environ.get('PROGRAMFILES')}\\Google\\Chrome\\Application\\chrome.exe"
         if os.path.exists(PROGRAMFILES):
             path = PROGRAMFILES
         else:
-            PROGRAMFILESX86 = (
-                f"{os.environ.get('PROGRAMFILES(X86)')}\\Google\\Chrome\\Application\\chrome.exe"
-            )
+            PROGRAMFILESX86 = f"{os.environ.get('PROGRAMFILES(X86)')}\\Google\\Chrome\\Application\\chrome.exe"
             if os.path.exists(PROGRAMFILESX86):
                 path = PROGRAMFILESX86
             else:
-                LOCALPATH = (
-                    f"{os.environ.get('LOCALAPPDATA')}\\Google\\Chrome\\Application\\chrome.exe"
-                )
+                LOCALPATH = f"{os.environ.get('LOCALAPPDATA')}\\Google\\Chrome\\Application\\chrome.exe"
                 if os.path.exists(LOCALPATH):
                     path = LOCALPATH
                 else:
                     path = None
         if not path:
-            raise FileNotFoundError("You don't have Google Chrome installed on your Windows system. Please install it by visiting https://www.google.com/chrome/.")
+            raise FileNotFoundError(
+                "You don't have Google Chrome installed on your Windows system. Please install it by visiting https://www.google.com/chrome/."
+            )
         else:
             return path
 
     return None
-
