@@ -265,7 +265,7 @@ class Config:
 
         args = unique_keys(args)
 
-        return [
+        return args + [
             # "--disable-background-timer-throttling",
             # "--disable-client-side-phishing-detection",
             # "--disable-default-apps",
