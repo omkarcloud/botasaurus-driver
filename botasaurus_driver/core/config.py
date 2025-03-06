@@ -123,7 +123,6 @@ def add_essential_options(options, profile, window_size, user_agent):
         window_size = WindowSize.window_size_to_string(window_size)
         options.add_argument(f"--window-size={window_size}")
 
-
 class Config:
     """
     Config object
@@ -142,14 +141,20 @@ class Config:
         arguments=[],
         user_agent=None,
         window_size=None,
+        enable_xvfb_virtual_display=False,  # New parameter
         lang=None,
         beep=False,
     ):
         if tiny_profile and profile is None:
             raise ValueError("Profile must be given when using tiny profile")
 
+        if enable_xvfb_virtual_display and headless:
+            raise ValueError("Xvfb Virtual Display cannot be used while headless mode is enabled")
+
+
         self.headless = headless
         self.proxy = proxy
+        self.enable_xvfb_virtual_display = enable_xvfb_virtual_display  # New attribute
 
         if self.proxy:
             self.local_proxy = create_local_proxy(self.proxy)
@@ -231,7 +236,7 @@ class Config:
         if self.headless:
             args.append("--headless=new")
         else:
-            if is_vmish:
+            if is_vmish or self.enable_xvfb_virtual_display:  # Modified condition
                 from pyvirtualdisplay import Display
 
                 try:
