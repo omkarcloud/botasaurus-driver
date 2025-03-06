@@ -1315,11 +1315,11 @@ class IframeElement(DriverBase):
     def iframe_url(self) -> Tab:
         return self._tab_value.target.url
 
-
 class Driver(DriverBase):
     def __init__(
         self,
         headless=False,
+        enable_xvfb_virtual_display=False,
         proxy=None,
         profile=None,
         tiny_profile=False,
@@ -1332,10 +1332,12 @@ class Driver(DriverBase):
         window_size=None,
         lang=None,
         beep=False,
+        host=None,
+        port=None,
     ):
-
         self.config = Config(
             headless=headless,
+            enable_xvfb_virtual_display=enable_xvfb_virtual_display,
             proxy=proxy,
             profile=profile,
             tiny_profile=tiny_profile,
@@ -1348,7 +1350,10 @@ class Driver(DriverBase):
             window_size=window_size,
             lang=lang,
             beep=beep,
+            host=host,
+            port=port,
         )
+
         self._tab_value: Tab = None
 
         self._browser: Browser = self._run(start(self.config))

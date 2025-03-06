@@ -131,6 +131,7 @@ class Config:
     def __init__(
         self,
         headless=False,
+        enable_xvfb_virtual_display=False,
         proxy=None,
         profile=None,
         tiny_profile=False,
@@ -141,16 +142,16 @@ class Config:
         arguments=[],
         user_agent=None,
         window_size=None,
-        enable_xvfb_virtual_display=False,  # New parameter
         lang=None,
         beep=False,
+        host="127.0.0.1", 
+        port=None,
     ):
         if tiny_profile and profile is None:
             raise ValueError("Profile must be given when using tiny profile")
 
         if enable_xvfb_virtual_display and headless:
             raise ValueError("Xvfb Virtual Display cannot be used while headless mode is enabled")
-
 
         self.headless = headless
         self.proxy = proxy
@@ -179,8 +180,9 @@ class Config:
         self.lang = lang
         self.beep = beep
 
-        self.host = "127.0.0.1"
-        self.port = free_port()
+        # Customizable host and port
+        self.host = host
+        self.port = port if port is not None else free_port()  # Use provided port or allocate a free one
 
         if self.tiny_profile or not self.profile:
             self.profile_directory = temp_profile_dir(str(self.port) + "_")
