@@ -4,8 +4,7 @@ from time import sleep, time
 
 label_selector = "label"
 
-def wait_till_document_is_ready(tab, wait_for_complete_page_load):
-    max_wait_time = 30
+def wait_till_document_is_ready(tab, wait_for_complete_page_load, timeout = 30):
     start_time = time()
     
     if wait_for_complete_page_load:
@@ -23,8 +22,8 @@ def wait_till_document_is_ready(tab, wait_for_complete_page_load):
             print("An exception occurred", e)
         
         elapsed_time = time() - start_time
-        if elapsed_time > max_wait_time:
-            raise TimeoutError("Document did not become ready within 30 seconds")
+        if elapsed_time > timeout:
+            raise TimeoutError(f"Document did not become ready within {timeout} seconds")
 
 def istakinglong(iframe):
     return "is taking longer than expected" in iframe.get_element_at_point(main_x,main_y,  wait=None).text

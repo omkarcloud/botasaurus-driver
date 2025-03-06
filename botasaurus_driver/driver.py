@@ -42,11 +42,12 @@ class Wait:
     SHORT = 4
     LONG = 8
     VERY_LONG = 16
+
 def generate_random_string(length: int = 32) -> str:
-            import random
-            import string
-            letters = string.ascii_letters
-            return ''.join(random.choice(letters) for i in range(length))
+    import random
+    import string
+    letters = string.ascii_letters
+    return ''.join(random.choice(letters) for i in range(length))
 
 
 def _get_iframe_tab(driver, internal_elem):
@@ -266,7 +267,6 @@ class Element:
             self.wait_for_element(selector, wait).humane_click()
         else:
             self._tab._run(self._elem.humane_click())
-
     # def press_and_hold(
     #     self, selector: Optional[str] = None, wait: Optional[int] = Wait.SHORT
     # ) -> None:
@@ -274,7 +274,6 @@ class Element:
     #         self.wait_for_element(selector, wait).press_and_hold()
     #     else:
     #         self._tab._run(self._elem.press_and_hold())            
-
     def type(
         self,
         text: str,
@@ -285,7 +284,6 @@ class Element:
             self.wait_for_element(selector, wait).type(text)
         else:
             self._tab._run(self._elem.send_keys(text))
-
     # def clear(self, selector: Optional[str] = None, wait: Optional[int] = Wait.SHORT) -> None:
     #     if selector:
     #         self.wait_for_element(selector, wait).clear()
@@ -653,19 +651,19 @@ class DriverBase:
     def _update_targets(self):
         return self._run(self._browser.update_targets())
 
-    def get(self, link: str, bypass_cloudflare=False, wait: Optional[int] = None) -> Tab:
+    def get(self, link: str, bypass_cloudflare=False, wait: Optional[int] = None, timeout=30) -> Tab:
         self._tab = self._run(self._browser.get(link))
         self.sleep(wait)
-        wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load)
+        wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load, timeout=timeout)
         if bypass_cloudflare:
             self.detect_and_bypass_cloudflare()
         block_if_should(self)
         return self._tab
 
-    def open_link_in_new_tab(self, link: str, bypass_cloudflare=False, wait: Optional[int] = None) -> Tab:
+    def open_link_in_new_tab(self, link: str, bypass_cloudflare=False, wait: Optional[int] = None, timeout=30) -> Tab:
         self._tab = self._run(self._browser.get(link, new_tab=True))
         self.sleep(wait)
-        wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load)
+        wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load, timeout=timeout)
         if bypass_cloudflare:
             self.detect_and_bypass_cloudflare()
         block_if_should(self)
@@ -680,6 +678,7 @@ class DriverBase:
         referer: str,
         bypass_cloudflare=False,
         wait: Optional[int] = None,
+        timeout=30,
     ) -> Tab:
 
         referer = referer.rstrip("/") + "/"
@@ -687,7 +686,7 @@ class DriverBase:
 
         self.sleep(wait)
 
-        wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load)
+        wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load, timeout=timeout)
 
         if bypass_cloudflare:
             self.detect_and_bypass_cloudflare()
@@ -700,6 +699,7 @@ class DriverBase:
         bypass_cloudflare=False,
         wait: Optional[int] = None,
         accept_google_cookies: bool = False,
+        timeout=30,
     ) -> Tab:
         if accept_google_cookies:
             # No need to accept cookies multiple times
@@ -720,11 +720,12 @@ class DriverBase:
             "https://www.google.com/",
             bypass_cloudflare=bypass_cloudflare,
             wait=wait,
+            timeout=timeout,
         )
         return self._tab
 
     def get_via_this_page(
-        self, link: str, bypass_cloudflare=False, wait: Optional[int] = None
+        self, link: str, bypass_cloudflare=False, wait: Optional[int] = None, timeout=30
     ) -> Tab:
         currenturl = self.current_url
         self.run_js(f'window.location.href = "{link}";')
@@ -735,7 +736,7 @@ class DriverBase:
                 sleep(0.1)
         self.sleep(wait)
 
-        wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load)
+        wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load, timeout=timeout)
 
         if bypass_cloudflare:
             self.detect_and_bypass_cloudflare()
@@ -757,7 +758,6 @@ class DriverBase:
     ) -> None:
         self.run_cdp_command(cdp.page.enable())
         return self.run_cdp_command(cdp.page.add_script_to_evaluate_on_new_document(script))
-        # self.run_cdp_command(cdp.page.add_script_to_evaluate_on_load(script))
         
     def run_cdp_command(self, command) -> Any:
         return self._run(self._tab.run_cdp_command(command))
@@ -894,7 +894,6 @@ class DriverBase:
     # def press_and_hold(self, selector: str, wait: Optional[int] = Wait.SHORT) -> None:
     #     elem = self.wait_for_element(selector, wait)
     #     elem.press_and_hold()
-
     def click_element_containing_text(
         self, text: str, wait: Optional[int] = Wait.SHORT
     ) -> None:
@@ -1230,7 +1229,7 @@ class DriverBase:
         self,
         expected_url: Union[str, List[str]],
         wait: Optional[int] = 8,
-        raise_exception: bool = True,
+        raise_exception: bool = True
     ) -> bool:
         def check_page(driver, expected_url):
             if expected_url.startswith("https://") or expected_url.startswith(
