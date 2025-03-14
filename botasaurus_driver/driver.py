@@ -214,7 +214,7 @@ class Element:
 
     @property
     def html(self):
-        return self._tab._run(self._elem.get_html())
+        return self._elem.get_html()
 
     @property
     def tag_name(self):
@@ -252,7 +252,6 @@ class Element:
         if attribute == "value":
             return self.value
         return self.attributes.get(attribute)
-
     # def get_js_properties(self) -> dict:
     #     """
     #     Retrieves the JavaScript properties of the element.
@@ -260,8 +259,7 @@ class Element:
     #     Returns:
     #         dict: A dictionary containing the JavaScript properties of the element.
     #     """
-    #     return self._elem.get_js_attributes()
-    
+    #     return self._elem.get_js_attributes()    
     def get_bounding_rect(self, absolute=False):
         return self._elem.get_position(absolute)
 
@@ -269,20 +267,17 @@ class Element:
         rect = self.get_bounding_rect()
         x = rect.x
         y = rect.y
-        elem_coro = self._tab.get_element_at_point(x, y, wait)
-        elem = self._tab._run(elem_coro)
+        elem = self._tab.get_element_at_point(x, y, wait)
         return make_element(self._driver, self._tab, elem) if elem else None
 
     def select(self, selector: str, wait: Optional[int] = Wait.SHORT) -> "Element":
-        elem_coro = self._elem.query_selector(selector, wait)
-        elem = self._tab._run(elem_coro)
+        elem = self._elem.query_selector(selector, wait)
         return make_element(self._driver, self._tab, elem)
 
     def select_all(
         self, selector: str, wait: Optional[int] = Wait.SHORT
     ) -> List["Element"]:
-        elems_coro = self._elem.query_selector_all(selector, wait)
-        elems = self._tab._run(elems_coro)
+        elems = self._elem.query_selector_all(selector, wait)
         return [make_element(self._driver, self._tab, e) for e in elems]
 
     def select_iframe(
@@ -296,7 +291,7 @@ class Element:
         if selector:
             self.wait_for_element(selector, wait).click()
         else:
-            self._tab._run(self._elem.click())
+            self._elem.click()
 
     def humane_click(
         self, selector: Optional[str] = None, wait: Optional[int] = Wait.SHORT
@@ -304,14 +299,14 @@ class Element:
         if selector:
             self.wait_for_element(selector, wait).humane_click()
         else:
-            self._tab._run(self._elem.humane_click())
+            self._elem.humane_click()
     # def press_and_hold(
     #     self, selector: Optional[str] = None, wait: Optional[int] = Wait.SHORT
     # ) -> None:
     #     if selector:
     #         self.wait_for_element(selector, wait).press_and_hold()
     #     else:
-    #         self._tab._run(self._elem.press_and_hold())            
+    #         self._elem.press_and_hold()
     def type(
         self,
         text: str,
@@ -321,7 +316,7 @@ class Element:
         if selector:
             self.wait_for_element(selector, wait).type(text)
         else:
-            self._tab._run(self._elem.send_keys(text))
+            self._elem.send_keys(text)
 
     def clear(self, selector: Optional[str] = None, wait: Optional[int] = Wait.SHORT) -> None:
         """
@@ -338,7 +333,7 @@ class Element:
         if selector:
             self.wait_for_element(selector, wait).clear()
         else:
-            self._tab._run(self._elem.clear_input())
+            self._elem.clear_input()
 
     def focus(self, selector: Optional[str] = None, wait: Optional[int] = Wait.SHORT) -> None:
         """
@@ -354,7 +349,7 @@ class Element:
         if selector:
             self.wait_for_element(selector, wait).focus()
         else:
-            self._tab._run(self._elem.focus())
+            self._elem.focus()
 
 
     def set_value(self, value: str) -> None:
@@ -367,7 +362,7 @@ class Element:
         Returns:
             None
         """
-        self._tab._run(self._elem.set_value(value))
+        self._elem.set_value(value)
 
     def set_text(self, text: str) -> None:
         """
@@ -379,7 +374,7 @@ class Element:
         Returns:
             None
         """
-        self._tab._run(self._elem.set_text(text))
+        self._elem.set_text(text)
 
     def check_element(
         self, selector: Optional[str] = None, wait: Optional[int] = Wait.SHORT
@@ -387,7 +382,7 @@ class Element:
         if selector:
             self.wait_for_element(selector, wait).check_element()
         else:
-            self._tab._run(self._elem.check_element())
+            self._elem.check_element()
 
     def uncheck_element(
         self, selector: Optional[str] = None, wait: Optional[int] = Wait.SHORT
@@ -395,7 +390,7 @@ class Element:
         if selector:
             self.wait_for_element(selector, wait).uncheck_element()
         else:
-            self._tab._run(self._elem.uncheck_element())
+            self._elem.uncheck_element()
 
     def select_option(
         self,
@@ -441,10 +436,9 @@ class Element:
         element_contains_text: Optional[str] = None,
         wait: Optional[int] = Wait.SHORT,
     ) -> str:
-        elems_coro = self._elem.query_selector_all(
+        elems = self._elem.query_selector_all(
             selector, timeout=wait, node_name="a"
         )
-        elems = self._tab._run(elems_coro)
 
         for elem in elems:
             if url_contains_text and url_contains_text not in elem.href:
@@ -462,10 +456,9 @@ class Element:
         element_contains_text: Optional[str] = None,
         wait: Optional[int] = Wait.SHORT,
     ) -> List[str]:
-        elems_coro = self._elem.query_selector_all(
+        elems = self._elem.query_selector_all(
             selector, timeout=wait, node_name="a"
         )
-        elems = self._tab._run(elems_coro)
 
         if url_contains_text:
             elems = [elem for elem in elems if url_contains_text in elem.href]
@@ -482,10 +475,9 @@ class Element:
         element_contains_text: Optional[str] = None,
         wait: Optional[int] = Wait.SHORT,
     ) -> str:
-        elems_coro = self._elem.query_selector_all(
+        elems = self._elem.query_selector_all(
             selector, timeout=wait, node_name="img"
         )
-        elems = self._tab._run(elems_coro)
 
         for elem in elems:
             if url_contains_text and url_contains_text not in elem.src:
@@ -503,10 +495,9 @@ class Element:
         element_contains_text: Optional[str] = None,
         wait: Optional[int] = Wait.SHORT,
     ) -> List[str]:
-        elems_coro = self._elem.query_selector_all(
+        elems = self._elem.query_selector_all(
             selector, timeout=wait, node_name="img"
         )
-        elems = self._tab._run(elems_coro)
 
         if url_contains_text:
             elems = [elem for elem in elems if url_contains_text in elem.src]
@@ -540,7 +531,7 @@ class Element:
         return make_element(
             self._driver,
             self._tab,
-            self._tab._run(self._elem.wait_for(selector, timeout=wait)),
+            self._elem.wait_for(selector, timeout=wait),
         )
     
     def remove(self) -> None:
@@ -548,7 +539,6 @@ class Element:
         Removes the element from the DOM.
         """
         self._elem.remove_from_dom()
-
     # def drag_element_to(self, destination: Union[str, 'Element'], wait: Optional[int] = Wait.SHORT) -> None:
     #     """
     #     Drags the current element to the specified destination element or selector.
@@ -565,7 +555,6 @@ class Element:
     #     else:
     #         destination_el = destination
     #     self._elem.mouse_drag(destination_el._elem)
-
 
     def scroll_to_bottom(self, smooth_scroll: bool = True) -> None:
         if smooth_scroll:
@@ -591,17 +580,17 @@ class Element:
             self.run_js(r"(el) => el.scrollBy({top: BY})".replace("BY", str(by)))
 
     def scroll_into_view(self) -> None:
-        self._tab._run(self._elem.scroll_into_view())
+        self._elem.scroll_into_view()
 
     def upload_file(self, file_path: str) -> None:
         file_path = convert_to_absolute_path(file_path)
         ensure_supports_file_upload(self)
-        self._tab._run(self._elem.send_file(file_path))
+        self._elem.send_file(file_path)
 
     def upload_multiple_files(self, file_paths: List[str]) -> None:
         file_paths = [convert_to_absolute_path(file_path) for file_path in file_paths]
         ensure_supports_multiple_upload(self)
-        self._tab._run(self._elem.send_file(*file_paths))
+        self._elem.send_file(*file_paths)
 
     def download_video(
         self,
@@ -609,9 +598,7 @@ class Element:
         wait_for_download_completion: bool = True,
         duration: Optional[Union[int, float]] = None,
     ) -> None:
-        relative_path = self._tab._run(
-            self._elem.download_video(create_video_filename(filename), duration)
-        )
+        relative_path = self._elem.download_video(create_video_filename(filename), duration)
 
         if wait_for_download_completion:
             while not self.is_video_downloaded():
@@ -620,22 +607,22 @@ class Element:
             print(f"View downloaded video at {relative_path}")
 
     def is_video_downloaded(self) -> bool:
-        return self._tab._run(self._elem.is_video_downloaded())
+        return self._elem.is_video_downloaded()
 
     def save_screenshot(
         self,
         filename: Optional[str] = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ".png",
     ) -> None:
-        self._tab._run(self._elem.save_screenshot(filename))
+        self._elem.save_screenshot(filename)
 
     def __repr__(self):
         return self._elem.__repr__()
 
     def run_js(self, script: str, args: Optional[any]=None) -> Any:
-        self._tab._run(self._elem.raise_if_disconnected())
+        self._elem.raise_if_disconnected()
 
         try:
-          return self._tab._run(self._elem.apply(script,args=args,))
+          return self._elem.apply(script,args=args)
         except Exception as e:
           print('An exception occurred')
 
@@ -789,8 +776,6 @@ class BrowserTab:
         self._browser:Browser = _browser
         self.native_fetch_name = None
         self.responses = Responses(self)
-    def _run(self, coro):
-        return coro
 
     @property
     def _tab(self) -> Tab:
@@ -822,7 +807,7 @@ class BrowserTab:
 
     @property
     def page_html(self):
-        return self._run(self._tab.get_content())
+        return self._tab.get_content()
 
     @property
     def local_storage(self):
@@ -830,7 +815,7 @@ class BrowserTab:
 
 
     def _update_targets(self):
-        return self._run(self._browser.update_targets())
+        return self._browser.update_targets()
 
 
     def prevent_fetch_spying(self) -> Any:
@@ -840,7 +825,7 @@ class BrowserTab:
 
     def run_js(self, script: str, args: Optional[any]=None) -> Any:
         # Run it in IIFE for isloation
-        return self._run(self._tab.evaluate(script,args=args,await_promise=True))
+        return self._tab.evaluate(script,args=args,await_promise=True)
 
     def run_on_new_document(
         self, script
@@ -849,7 +834,7 @@ class BrowserTab:
         return self.run_cdp_command(cdp.page.add_script_to_evaluate_on_new_document(script))
 
     def run_cdp_command(self, command) -> Any:
-        return self._run(self._tab.run_cdp_command(command))
+        return self._tab.run_cdp_command(command)
 
 
     def before_request_sent(self, handler: Callable[[str, cdp.network.Request, cdp.network.RequestWillBeSent], None]):
@@ -883,7 +868,7 @@ class BrowserTab:
             collected_responses = driver.responses.collect()
             ```
         """
-        self._tab._run(self._tab.before_request_sent(handler))
+        self._tab.before_request_sent(handler)
 
     def after_response_received(self, handler: Callable[[str, cdp.network.Response, cdp.network.ResponseReceived], None]):
         """
@@ -923,7 +908,7 @@ class BrowserTab:
             collected_responses = driver.responses.collect()
             ```
         """
-        self._tab._run(self._tab.after_response_received(handler))
+        self._tab.after_response_received(handler)
         
     def collect_response(self, request):
         try:
@@ -949,29 +934,27 @@ class BrowserTab:
 
 
     def get_js_variable(self, variable_name: str) -> Any:
-        return self._run(self._tab.js_dumps(variable_name))
+        return self._tab.js_dumps(variable_name)
 
     def select(self, selector: str, wait: Optional[int] = Wait.SHORT) -> Element:
-        elem = self._run(self._tab.select(selector, timeout=wait))
+        elem = self._tab.select(selector, timeout=wait)
         return make_element(self, self._tab, elem) if elem else None
     
     def click_at_point(self, x: int, y:int):
-        self._run(self._tab.click_at_point(
+        self._tab.click_at_point(
             x, y
-        ))
+        )
 
     def select_all(
         self, selector: str, wait: Optional[int] = Wait.SHORT
     ) -> List[Element]:
-        elems_coro = self._tab.select_all(selector, timeout=wait)
-        elems = self._run(elems_coro)
+        elems = self._tab.select_all(selector, timeout=wait)
         return [make_element(self, self._tab, e) for e in elems]
     
     def count(
         self, selector: str, wait: Optional[int] = Wait.SHORT
     ) -> List[Element]:
-        elems_coro = self._tab.count_select(selector, timeout=wait)
-        return self._run(elems_coro)
+        return self._tab.count_select(selector, timeout=wait)
 
 
     def select_iframe(
@@ -985,8 +968,7 @@ class BrowserTab:
         wait: Optional[int] = Wait.SHORT,
         type: Optional[str] = None,
     ) -> Element:
-        elem_coro = self._tab.find(text, type=type, timeout=wait)
-        elem = self._run(elem_coro)
+        elem = self._tab.find(text, type=type, timeout=wait)
         return make_element(self, self._tab, elem) if elem else None
 
     def get_all_elements_containing_text(
@@ -995,8 +977,7 @@ class BrowserTab:
         wait: Optional[int] = Wait.SHORT,
         type: Optional[str] = None,
     ) -> List[Element]:
-        elems_coro = self._tab.find_all(text, type=type, timeout=wait)
-        elems = self._run(elems_coro)
+        elems = self._tab.find_all(text, type=type, timeout=wait)
         return [make_element(self, self._tab, e) for e in elems]
 
     def get_element_with_exact_text(
@@ -1005,8 +986,7 @@ class BrowserTab:
         wait: Optional[int] = Wait.SHORT,
         type: Optional[str] = None,
     ) -> Element:
-        elem_coro = self._tab.find(text, type=type, timeout=wait, exact_match=True)
-        elem = self._run(elem_coro)
+        elem = self._tab.find(text, type=type, timeout=wait, exact_match=True)
         return make_element(self, self._tab, elem) if elem else None
 
     def get_all_elements_with_exact_text(
@@ -1015,8 +995,7 @@ class BrowserTab:
         wait: Optional[int] = Wait.SHORT,
         type: Optional[str] = None,
     ) -> List[Element]:
-        elems_coro = self._tab.find_all(text, type=type, timeout=wait, exact_match=True)
-        elems = self._run(elems_coro)
+        elems = self._tab.find_all(text, type=type, timeout=wait, exact_match=True)
         return [make_element(self, self._tab, e) for e in elems]
 
     def get_element_at_point(
@@ -1026,8 +1005,7 @@ class BrowserTab:
         child_selector: Optional[str] = None,
         wait: Optional[int] = Wait.SHORT,
     ) -> Element:
-        elem_coro = self._tab.get_element_at_point(x, y, wait)
-        elem = self._run(elem_coro)
+        elem = self._tab.get_element_at_point(x, y, wait)
         el = make_element(self, self._tab, elem) if elem else None
 
         if not el:
@@ -1041,8 +1019,7 @@ class BrowserTab:
                 if wait:
                     now = time.time()
                     while not selected_el:
-                        elem_coro = self._tab.get_element_at_point(x, y, None)
-                        elem = self._run(elem_coro)
+                        elem = self._tab.get_element_at_point(x, y, None)
                         el = make_element(self, self._tab, elem) if elem else None
                         if el:
                             selected_el = el.select(child_selector, wait=None)
@@ -1229,8 +1206,7 @@ class BrowserTab:
         element_contains_text: Optional[str] = None,
         wait: Optional[int] = Wait.SHORT,
     ) -> str:
-        elems_coro = self._tab.select_all(selector, timeout=wait, node_name="a")
-        elems = self._run(elems_coro)
+        elems = self._tab.select_all(selector, timeout=wait, node_name="a")
 
         for elem in elems:
             if url_contains_text and url_contains_text not in elem.href:
@@ -1248,10 +1224,9 @@ class BrowserTab:
         element_contains_text: Optional[str] = None,
         wait: Optional[int] = Wait.SHORT,
     ) -> List[str]:
-        elems_coro = self._tab.select_all(
+        elems = self._tab.select_all(
             selector if selector else "a[href]", timeout=wait, node_name="a"
         )
-        elems = self._run(elems_coro)
 
         if url_contains_text:
             elems = [elem for elem in elems if url_contains_text in elem.href]
@@ -1266,8 +1241,7 @@ class BrowserTab:
         element_contains_text: Optional[str] = None,
         wait: Optional[int] = Wait.SHORT,
     ) -> str:
-        elems_coro = self._tab.select_all(selector, timeout=wait, node_name="img")
-        elems = self._run(elems_coro)
+        elems = self._tab.select_all(selector, timeout=wait, node_name="img")
 
         for elem in elems:
             if url_contains_text and url_contains_text not in elem.src:
@@ -1285,10 +1259,9 @@ class BrowserTab:
         element_contains_text: Optional[str] = None,
         wait: Optional[int] = Wait.SHORT,
     ) -> List[str]:
-        elems_coro = self._tab.select_all(
+        elems = self._tab.select_all(
             selector if selector else "img[src]", timeout=wait, node_name="img"
         )
-        elems = self._run(elems_coro)
 
         if url_contains_text:
             elems = [elem for elem in elems if url_contains_text in elem.src]
@@ -1306,7 +1279,7 @@ class BrowserTab:
         self, selector: str, wait: Optional[int] = Wait.SHORT
     ) -> Element:
         return make_element(
-            self, self._tab, self._run(self._tab.wait_for(selector, timeout=wait))
+            self, self._tab, self._tab.wait_for(selector, timeout=wait)
         )
 
     def remove(self, selector: str, wait: Optional[int] = Wait.SHORT) -> None:
@@ -1334,7 +1307,6 @@ class BrowserTab:
     ) -> dict:
         el = self.wait_for_element(selector, wait)
         return el.attributes
-
     # def get_js_properties(self, selector: str, wait: Optional[int] = Wait.SHORT) -> dict:
     #     """
     #     Retrieves the JavaScript properties of the element specified by the selector.
@@ -1348,7 +1320,6 @@ class BrowserTab:
     #     """
     #     el = self.wait_for_element(selector, wait)
     #     return el.get_js_properties()
-
     def scroll_to_bottom(
         self,
         selector: Optional[str] = None,
@@ -1470,7 +1441,7 @@ class BrowserTab:
         return cookies_dict
 
     def get_cookies(self) -> List[dict]:
-        return self._run(self._browser.cookies.get_all())
+        return self._browser.cookies.get_all()
 
     def get_local_storage(self) -> dict:
         storage = self.local_storage
@@ -1483,7 +1454,7 @@ class BrowserTab:
         return {"cookies": cookies, "local_storage": local_storage}
 
     def add_cookies(self, cookies: List[dict]) -> None:
-        return self._run(self._browser.cookies.set_all(cookies))
+        return self._browser.cookies.set_all(cookies)
 
     def add_local_storage(self, local_storage: dict) -> None:
         storage = self.local_storage
@@ -1497,7 +1468,7 @@ class BrowserTab:
         self.add_local_storage(local_storage)
 
     def delete_cookies(self) -> None:
-        return self._run(self._browser.cookies.clear())
+        return self._browser.cookies.clear()
 
     def delete_local_storage(self) -> None:
         self.run_js("window.localStorage.clear();")
@@ -1558,7 +1529,7 @@ class BrowserTab:
         self,
         filename: Optional[str] = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ".png",
     ) -> None:
-        self._run(self._tab.save_screenshot(filename=filename))
+        self._tab.save_screenshot(filename=filename)
 
     def save_element_screenshot(
         self,
@@ -1588,21 +1559,11 @@ class BrowserTab:
 
     def download_file(self, url: str, filename: Optional[str] = None) -> None:
         # if filename not provided, then try getting filename from url response, else fallback to default datetime filename
-        self._run(self._tab.download_file(url, filename))
+        self._tab.download_file(url, filename)
 
     def __repr__(self):
         return self._tab.__repr__()
 
-
-
-# class IframeTabBase(BrowserTab):
-    # - 
-    # 
-# class IframeElementBase(BrowserTab):
-# overrides BrowserTab appropeiately. 
-    # - saying method is not supported, 
-    # or print getting from main tab, not iframe, due to different origin
-    # givess appropeouiatelt
 
 
 class IframeTab(BrowserTab):
@@ -1628,11 +1589,6 @@ class IframeElement(BrowserTab):
 
     def select(self, selector: str, wait: Optional[int] = Wait.SHORT) -> Element:
         return self.elem.select(selector, wait)
-        
-
-    # @property
-    # def iframe_url(self) -> Tab:
-    #     return self._tab_value.target.url
 
 class Driver(BrowserTab):
     def __init__(
@@ -1675,7 +1631,7 @@ class Driver(BrowserTab):
 
         self._tab_value: Tab = None
 
-        self._browser: Browser = self._run(start(self.config))
+        self._browser: Browser = start(self.config)
 
         if self.config.tiny_profile:
             load_cookies(self, self.config.profile)
@@ -1716,7 +1672,7 @@ class Driver(BrowserTab):
         
 
     def get(self, link: str, bypass_cloudflare=False, wait: Optional[int] = None, timeout=30) -> Tab:
-        self._tab = self._run(self._browser.get(link))
+        self._tab = self._browser.get(link)
         self.sleep(wait)
         wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load, timeout=timeout)
         if bypass_cloudflare:
@@ -1724,7 +1680,7 @@ class Driver(BrowserTab):
         return self._tab
 
     def open_link_in_new_tab(self, link: str, bypass_cloudflare=False, wait: Optional[int] = None, timeout=30) -> Tab:
-        self._tab = self._run(self._browser.get(link, new_tab=True))
+        self._tab = self._browser.get(link, new_tab=True)
         self.sleep(wait)
         wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load, timeout=timeout)
         if bypass_cloudflare:
@@ -1741,7 +1697,7 @@ class Driver(BrowserTab):
         timeout=30,
     ) -> Tab:
         referer = referer.rstrip("/") + "/"
-        self._tab = self._run(self._browser.get(link, referrer=referer))
+        self._tab = self._browser.get(link, referrer=referer)
         self.sleep(wait)
         wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load, timeout=timeout)
 
@@ -1800,7 +1756,7 @@ class Driver(BrowserTab):
         return self._tab
 
     def reload(self) -> Tab:
-        self._run(self._tab.reload())
+        self._tab.reload()
         wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load)
         return self._tab
             
@@ -1838,7 +1794,7 @@ class Driver(BrowserTab):
         self._browser.grant_all_permissions()
 
     def allow_insecure_connections(self) -> None:
-        self._tab._run(self._tab.bypass_insecure_connection_warning())
+        self._tab.bypass_insecure_connection_warning()
 
 
     def close(self) -> None:
