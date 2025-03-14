@@ -7,12 +7,12 @@
 
 from __future__ import annotations
 
+import enum
 import typing
 from dataclasses import dataclass
 
-from . import runtime
-from . import storage
-from .util import T_JSON_DICT
+from . import runtime, storage
+from .util import T_JSON_DICT, event_class
 
 
 @dataclass

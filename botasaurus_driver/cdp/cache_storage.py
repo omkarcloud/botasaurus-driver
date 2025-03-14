@@ -12,7 +12,7 @@ import typing
 from dataclasses import dataclass
 
 from . import storage
-from .util import T_JSON_DICT
+from .util import T_JSON_DICT, event_class
 
 
 class CacheId(str):

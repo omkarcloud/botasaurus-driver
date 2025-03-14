@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from deprecated.sphinx import deprecated  # type: ignore
 
 from . import network
-from .util import event_class, T_JSON_DICT
+from .util import T_JSON_DICT, event_class
 
 
 class CertificateId(int):
@@ -101,7 +101,7 @@ class CertificateSecurityState:
     #: Certificate valid to (expiration) date
     valid_to: network.TimeSinceEpoch
 
-    #: True if the certificate uses a weak signature aglorithm.
+    #: True if the certificate uses a weak signature algorithm.
     certificate_has_weak_signature: bool
 
     #: True if the certificate has a SHA1 signature in the chain.

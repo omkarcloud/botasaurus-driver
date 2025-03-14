@@ -13,9 +13,8 @@ from dataclasses import dataclass
 
 from deprecated.sphinx import deprecated  # type: ignore
 
-from . import dom
-from . import runtime
-from .util import T_JSON_DICT
+from . import dom, runtime
+from .util import T_JSON_DICT, event_class
 
 
 class DOMBreakpointType(enum.Enum):

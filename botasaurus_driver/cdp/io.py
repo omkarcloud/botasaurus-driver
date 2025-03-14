@@ -7,10 +7,12 @@
 
 from __future__ import annotations
 
+import enum
 import typing
+from dataclasses import dataclass
 
 from . import runtime
-from .util import T_JSON_DICT
+from .util import T_JSON_DICT, event_class
 
 
 class StreamHandle(str):
@@ -56,7 +58,7 @@ def read(
     Read a chunk of the stream
 
     :param handle: Handle of the stream to read.
-    :param offset: *(Optional)* Seek to the specified offset before reading (if not specificed, proceed with offset following the last read). Some types of streams may only support sequential reads.
+    :param offset: *(Optional)* Seek to the specified offset before reading (if not specified, proceed with offset following the last read). Some types of streams may only support sequential reads.
     :param size: *(Optional)* Maximum number of bytes to read (left upon the agent discretion if not specified).
     :returns: A tuple with the following items:
 

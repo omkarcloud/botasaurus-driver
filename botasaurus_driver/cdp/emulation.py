@@ -13,10 +13,8 @@ from dataclasses import dataclass
 
 from deprecated.sphinx import deprecated  # type: ignore
 
-from . import dom
-from . import network
-from . import page
-from .util import event_class, T_JSON_DICT
+from . import dom, network, page
+from .util import T_JSON_DICT, event_class
 
 
 @dataclass
@@ -135,7 +133,7 @@ class VirtualTimePolicy(enum.Enum):
 @dataclass
 class UserAgentBrandVersion:
     """
-    Used to specify User Agent Cient Hints to emulate. See https://wicg.github.io/ua-client-hints
+    Used to specify User Agent Client Hints to emulate. See https://wicg.github.io/ua-client-hints
     """
 
     brand: str
@@ -159,7 +157,7 @@ class UserAgentBrandVersion:
 @dataclass
 class UserAgentMetadata:
     """
-    Used to specify User Agent Cient Hints to emulate. See https://wicg.github.io/ua-client-hints
+    Used to specify User Agent Client Hints to emulate. See https://wicg.github.io/ua-client-hints
     Missing optional values will be filled in by the target with what it would normally use.
     """
 
@@ -247,7 +245,6 @@ class SensorType(enum.Enum):
     GYROSCOPE = "gyroscope"
     LINEAR_ACCELERATION = "linear-acceleration"
     MAGNETOMETER = "magnetometer"
-    PROXIMITY = "proximity"
     RELATIVE_ORIENTATION = "relative-orientation"
 
     def to_json(self) -> str:
@@ -404,6 +401,52 @@ class SensorReading:
         )
 
 
+class PressureSource(enum.Enum):
+    CPU = "cpu"
+
+    def to_json(self) -> str:
+        return self.value
+
+    @classmethod
+    def from_json(cls, json: str) -> PressureSource:
+        return cls(json)
+
+
+class PressureState(enum.Enum):
+    NOMINAL = "nominal"
+    FAIR = "fair"
+    SERIOUS = "serious"
+    CRITICAL = "critical"
+
+    def to_json(self) -> str:
+        return self.value
+
+    @classmethod
+    def from_json(cls, json: str) -> PressureState:
+        return cls(json)
+
+
+@dataclass
+class PressureMetadata:
+    available: typing.Optional[bool] = None
+
+    def to_json(self) -> T_JSON_DICT:
+        json: T_JSON_DICT = dict()
+        if self.available is not None:
+            json["available"] = self.available
+        return json
+
+    @classmethod
+    def from_json(cls, json: T_JSON_DICT) -> PressureMetadata:
+        return cls(
+            available=(
+                bool(json["available"])
+                if json.get("available", None) is not None
+                else None
+            ),
+        )
+
+
 class DisabledImageType(enum.Enum):
     """
     Enum of image types that can be disabled.
@@ -420,9 +463,12 @@ class DisabledImageType(enum.Enum):
         return cls(json)
 
 
+@deprecated(version="1.3")
 def can_emulate() -> typing.Generator[T_JSON_DICT, T_JSON_DICT, bool]:
     """
     Tells whether emulation is supported.
+
+    .. deprecated:: 1.3
 
     :returns: True if emulation is supported.
     """
@@ -574,7 +620,7 @@ def set_device_metrics_override(
     :param screen_orientation: *(Optional)* Screen orientation override.
     :param viewport: **(EXPERIMENTAL)** *(Optional)* If set, the visible area of the page will be overridden to this viewport. This viewport change is not observed by the page, e.g. viewport-relative elements do not change positions.
     :param display_feature: **(EXPERIMENTAL)** *(Optional)* If set, the display feature of a multi-segment screen. If not set, multi-segment support is turned-off.
-    :param device_posture: **(EXPERIMENTAL)** *(Optional)* If set, the posture of a foldable device. If not set the posture is set to continuous.
+    :param device_posture: **(DEPRECATED)** **(EXPERIMENTAL)** *(Optional)* If set, the posture of a foldable device. If not set the posture is set to continuous. Deprecated, use Emulation.setDevicePostureOverride.
     """
     params: T_JSON_DICT = dict()
     params["width"] = width
@@ -604,6 +650,41 @@ def set_device_metrics_override(
     cmd_dict: T_JSON_DICT = {
         "method": "Emulation.setDeviceMetricsOverride",
         "params": params,
+    }
+    json = yield cmd_dict
+
+
+def set_device_posture_override(
+    posture: DevicePosture,
+) -> typing.Generator[T_JSON_DICT, T_JSON_DICT, None]:
+    """
+    Start reporting the given posture value to the Device Posture API.
+    This override can also be set in setDeviceMetricsOverride().
+
+    **EXPERIMENTAL**
+
+    :param posture:
+    """
+    params: T_JSON_DICT = dict()
+    params["posture"] = posture.to_json()
+    cmd_dict: T_JSON_DICT = {
+        "method": "Emulation.setDevicePostureOverride",
+        "params": params,
+    }
+    json = yield cmd_dict
+
+
+def clear_device_posture_override() -> typing.Generator[T_JSON_DICT, T_JSON_DICT, None]:
+    """
+    Clears a device posture override set with either setDeviceMetricsOverride()
+    or setDevicePostureOverride() and starts using posture information from the
+    platform again.
+    Does nothing if no override is set.
+
+    **EXPERIMENTAL**
+    """
+    cmd_dict: T_JSON_DICT = {
+        "method": "Emulation.clearDevicePostureOverride",
     }
     json = yield cmd_dict
 
@@ -787,7 +868,7 @@ def set_sensor_override_readings(
     type_: SensorType, reading: SensorReading
 ) -> typing.Generator[T_JSON_DICT, T_JSON_DICT, None]:
     """
-    Updates the sensor readings reported by a sensor type previously overriden
+    Updates the sensor readings reported by a sensor type previously overridden
     by setSensorOverrideEnabled.
 
     **EXPERIMENTAL**
@@ -800,6 +881,58 @@ def set_sensor_override_readings(
     params["reading"] = reading.to_json()
     cmd_dict: T_JSON_DICT = {
         "method": "Emulation.setSensorOverrideReadings",
+        "params": params,
+    }
+    json = yield cmd_dict
+
+
+def set_pressure_source_override_enabled(
+    enabled: bool,
+    source: PressureSource,
+    metadata: typing.Optional[PressureMetadata] = None,
+) -> typing.Generator[T_JSON_DICT, T_JSON_DICT, None]:
+    """
+    Overrides a pressure source of a given type, as used by the Compute
+    Pressure API, so that updates to PressureObserver.observe() are provided
+    via setPressureStateOverride instead of being retrieved from
+    platform-provided telemetry data.
+
+    **EXPERIMENTAL**
+
+    :param enabled:
+    :param source:
+    :param metadata: *(Optional)*
+    """
+    params: T_JSON_DICT = dict()
+    params["enabled"] = enabled
+    params["source"] = source.to_json()
+    if metadata is not None:
+        params["metadata"] = metadata.to_json()
+    cmd_dict: T_JSON_DICT = {
+        "method": "Emulation.setPressureSourceOverrideEnabled",
+        "params": params,
+    }
+    json = yield cmd_dict
+
+
+def set_pressure_state_override(
+    source: PressureSource, state: PressureState
+) -> typing.Generator[T_JSON_DICT, T_JSON_DICT, None]:
+    """
+    Provides a given pressure state that will be processed and eventually be
+    delivered to PressureObserver users. ``source`` must have been previously
+    overridden by setPressureSourceOverrideEnabled.
+
+    **EXPERIMENTAL**
+
+    :param source:
+    :param state:
+    """
+    params: T_JSON_DICT = dict()
+    params["source"] = source.to_json()
+    params["state"] = state.to_json()
+    cmd_dict: T_JSON_DICT = {
+        "method": "Emulation.setPressureStateOverride",
         "params": params,
     }
     json = yield cmd_dict
@@ -974,7 +1107,7 @@ def set_timezone_override(
     """
     Overrides default host system timezone with the specified one.
 
-    :param timezone_id: The timezone identifier. If empty, disables the override and restores default host system timezone.
+    :param timezone_id: The timezone identifier. List of supported timezones: https://source.chromium.org/chromium/chromium/deps/icu.git/+/faee8bc70570192d82d2978a71e2a615788597d1:source/data/misc/metaZones.txt If empty, disables the override and restores default host system timezone.
     """
     params: T_JSON_DICT = dict()
     params["timezoneId"] = timezone_id
@@ -1057,6 +1190,7 @@ def set_user_agent_override(
 ) -> typing.Generator[T_JSON_DICT, T_JSON_DICT, None]:
     """
     Allows overriding user agent with the given string.
+    ``userAgentMetadata`` must be set for Client Hint headers to be sent.
 
     :param user_agent: User agent to use.
     :param accept_language: *(Optional)* Browser language to emulate.

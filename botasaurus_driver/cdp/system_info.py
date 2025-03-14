@@ -11,7 +11,7 @@ import enum
 import typing
 from dataclasses import dataclass
 
-from .util import T_JSON_DICT
+from .util import T_JSON_DICT, event_class
 
 
 @dataclass

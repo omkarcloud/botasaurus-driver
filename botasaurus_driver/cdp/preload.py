@@ -11,10 +11,8 @@ import enum
 import typing
 from dataclasses import dataclass
 
-from . import dom
-from . import network
-from . import page
-from .util import event_class, T_JSON_DICT
+from . import dom, network, page
+from .util import T_JSON_DICT, event_class
 
 
 class RuleSetId(str):
@@ -219,7 +217,7 @@ class PreloadingAttemptSource:
     that had a speculation rule that triggered the attempt, and the
     BackendNodeIds of <a href> or <area href> elements that triggered the
     attempt (in the case of attempts triggered by a document rule). It is
-    possible for mulitple rule sets and links to trigger a single attempt.
+    possible for multiple rule sets and links to trigger a single attempt.
     """
 
     key: PreloadingAttemptKey
@@ -342,6 +340,14 @@ class PrerenderFinalStatus(enum.Enum):
         "RedirectedPrerenderingUrlHasEffectiveUrl"
     )
     ACTIVATION_URL_HAS_EFFECTIVE_URL = "ActivationUrlHasEffectiveUrl"
+    JAVA_SCRIPT_INTERFACE_ADDED = "JavaScriptInterfaceAdded"
+    JAVA_SCRIPT_INTERFACE_REMOVED = "JavaScriptInterfaceRemoved"
+    ALL_PRERENDERING_CANCELED = "AllPrerenderingCanceled"
+    WINDOW_CLOSED = "WindowClosed"
+    SLOW_NETWORK = "SlowNetwork"
+    OTHER_PRERENDERED_PAGE_ACTIVATED = "OtherPrerenderedPageActivated"
+    V8_OPTIMIZER_DISABLED = "V8OptimizerDisabled"
+    PRERENDER_FAILED_DURING_PREFETCH = "PrerenderFailedDuringPrefetch"
 
     def to_json(self) -> str:
         return self.value
@@ -384,7 +390,6 @@ class PrefetchStatus(enum.Enum):
     PREFETCH_FAILED_MIME_NOT_SUPPORTED = "PrefetchFailedMIMENotSupported"
     PREFETCH_FAILED_NET_ERROR = "PrefetchFailedNetError"
     PREFETCH_FAILED_NON2_XX = "PrefetchFailedNon2XX"
-    PREFETCH_FAILED_PER_PAGE_LIMIT_EXCEEDED = "PrefetchFailedPerPageLimitExceeded"
     PREFETCH_EVICTED_AFTER_CANDIDATE_REMOVED = "PrefetchEvictedAfterCandidateRemoved"
     PREFETCH_EVICTED_FOR_NEWER_PREFETCH = "PrefetchEvictedForNewerPrefetch"
     PREFETCH_HELDBACK = "PrefetchHeldback"
@@ -467,6 +472,7 @@ class PrerenderMismatchedHeaders:
 
 
 def enable() -> typing.Generator[T_JSON_DICT, T_JSON_DICT, None]:
+
     cmd_dict: T_JSON_DICT = {
         "method": "Preload.enable",
     }
@@ -474,6 +480,7 @@ def enable() -> typing.Generator[T_JSON_DICT, T_JSON_DICT, None]:
 
 
 def disable() -> typing.Generator[T_JSON_DICT, T_JSON_DICT, None]:
+
     cmd_dict: T_JSON_DICT = {
         "method": "Preload.disable",
     }

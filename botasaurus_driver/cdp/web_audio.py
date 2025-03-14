@@ -11,7 +11,7 @@ import enum
 import typing
 from dataclasses import dataclass
 
-from .util import event_class, T_JSON_DICT
+from .util import T_JSON_DICT, event_class
 
 
 class GraphObjectId(str):
@@ -54,6 +54,7 @@ class ContextState(enum.Enum):
     SUSPENDED = "suspended"
     RUNNING = "running"
     CLOSED = "closed"
+    INTERRUPTED = "interrupted"
 
     def to_json(self) -> str:
         return self.value

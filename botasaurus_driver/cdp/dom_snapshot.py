@@ -7,15 +7,14 @@
 
 from __future__ import annotations
 
+import enum
 import typing
 from dataclasses import dataclass
 
 from deprecated.sphinx import deprecated  # type: ignore
 
-from . import dom
-from . import dom_debugger
-from . import page
-from .util import T_JSON_DICT
+from . import dom, dom_debugger, page
+from .util import T_JSON_DICT, event_class
 
 
 @dataclass
@@ -49,7 +48,7 @@ class DOMNode:
     option_selected: typing.Optional[bool] = None
 
     #: The indexes of the node's child nodes in the ``domNodes`` array returned by ``getSnapshot``, if
-    #: Any.
+    #: any.
     child_node_indexes: typing.Optional[typing.List[int]] = None
 
     #: Attributes of an ``Element`` node.

@@ -12,7 +12,7 @@ import typing
 from dataclasses import dataclass
 
 from . import target
-from .util import event_class, T_JSON_DICT
+from .util import T_JSON_DICT, event_class
 
 
 class RegistrationID(str):
@@ -231,6 +231,7 @@ def deliver_push_message(
 
 
 def disable() -> typing.Generator[T_JSON_DICT, T_JSON_DICT, None]:
+
     cmd_dict: T_JSON_DICT = {
         "method": "ServiceWorker.disable",
     }
@@ -278,6 +279,7 @@ def dispatch_periodic_sync_event(
 
 
 def enable() -> typing.Generator[T_JSON_DICT, T_JSON_DICT, None]:
+
     cmd_dict: T_JSON_DICT = {
         "method": "ServiceWorker.enable",
     }
@@ -339,6 +341,7 @@ def start_worker(scope_url: str) -> typing.Generator[T_JSON_DICT, T_JSON_DICT, N
 
 
 def stop_all_workers() -> typing.Generator[T_JSON_DICT, T_JSON_DICT, None]:
+
     cmd_dict: T_JSON_DICT = {
         "method": "ServiceWorker.stopAllWorkers",
     }

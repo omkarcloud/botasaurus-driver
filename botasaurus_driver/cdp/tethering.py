@@ -7,10 +7,11 @@
 
 from __future__ import annotations
 
+import enum
 import typing
 from dataclasses import dataclass
 
-from .util import event_class, T_JSON_DICT
+from .util import T_JSON_DICT, event_class
 
 
 def bind(port: int) -> typing.Generator[T_JSON_DICT, T_JSON_DICT, None]:

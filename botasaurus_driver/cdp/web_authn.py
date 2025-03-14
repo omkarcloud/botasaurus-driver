@@ -11,7 +11,7 @@ import enum
 import typing
 from dataclasses import dataclass
 
-from .util import event_class, T_JSON_DICT
+from .util import T_JSON_DICT, event_class
 
 
 class AuthenticatorId(str):
@@ -233,6 +233,25 @@ class Credential:
     #: See https://w3c.github.io/webauthn/#sctn-large-blob-extension (Encoded as a base64 string when passed over JSON)
     large_blob: typing.Optional[str] = None
 
+    #: Assertions returned by this credential will have the backup eligibility
+    #: (BE) flag set to this value. Defaults to the authenticator's
+    #: defaultBackupEligibility value.
+    backup_eligibility: typing.Optional[bool] = None
+
+    #: Assertions returned by this credential will have the backup state (BS)
+    #: flag set to this value. Defaults to the authenticator's
+    #: defaultBackupState value.
+    backup_state: typing.Optional[bool] = None
+
+    #: The credential's user.name property. Equivalent to empty if not set.
+    #: https://w3c.github.io/webauthn/#dom-publickeycredentialentity-name
+    user_name: typing.Optional[str] = None
+
+    #: The credential's user.displayName property. Equivalent to empty if
+    #: not set.
+    #: https://w3c.github.io/webauthn/#dom-publickeycredentialuserentity-displayname
+    user_display_name: typing.Optional[str] = None
+
     def to_json(self) -> T_JSON_DICT:
         json: T_JSON_DICT = dict()
         json["credentialId"] = self.credential_id
@@ -245,6 +264,14 @@ class Credential:
             json["userHandle"] = self.user_handle
         if self.large_blob is not None:
             json["largeBlob"] = self.large_blob
+        if self.backup_eligibility is not None:
+            json["backupEligibility"] = self.backup_eligibility
+        if self.backup_state is not None:
+            json["backupState"] = self.backup_state
+        if self.user_name is not None:
+            json["userName"] = self.user_name
+        if self.user_display_name is not None:
+            json["userDisplayName"] = self.user_display_name
         return json
 
     @classmethod
@@ -263,6 +290,26 @@ class Credential:
             large_blob=(
                 str(json["largeBlob"])
                 if json.get("largeBlob", None) is not None
+                else None
+            ),
+            backup_eligibility=(
+                bool(json["backupEligibility"])
+                if json.get("backupEligibility", None) is not None
+                else None
+            ),
+            backup_state=(
+                bool(json["backupState"])
+                if json.get("backupState", None) is not None
+                else None
+            ),
+            user_name=(
+                str(json["userName"])
+                if json.get("userName", None) is not None
+                else None
+            ),
+            user_display_name=(
+                str(json["userDisplayName"])
+                if json.get("userDisplayName", None) is not None
                 else None
             ),
         )
@@ -498,6 +545,35 @@ def set_automatic_presence_simulation(
     json = yield cmd_dict
 
 
+def set_credential_properties(
+    authenticator_id: AuthenticatorId,
+    credential_id: str,
+    backup_eligibility: typing.Optional[bool] = None,
+    backup_state: typing.Optional[bool] = None,
+) -> typing.Generator[T_JSON_DICT, T_JSON_DICT, None]:
+    """
+    Allows setting credential properties.
+    https://w3c.github.io/webauthn/#sctn-automation-set-credential-properties
+
+    :param authenticator_id:
+    :param credential_id:
+    :param backup_eligibility: *(Optional)*
+    :param backup_state: *(Optional)*
+    """
+    params: T_JSON_DICT = dict()
+    params["authenticatorId"] = authenticator_id.to_json()
+    params["credentialId"] = credential_id
+    if backup_eligibility is not None:
+        params["backupEligibility"] = backup_eligibility
+    if backup_state is not None:
+        params["backupState"] = backup_state
+    cmd_dict: T_JSON_DICT = {
+        "method": "WebAuthn.setCredentialProperties",
+        "params": params,
+    }
+    json = yield cmd_dict
+
+
 @event_class("WebAuthn.credentialAdded")
 @dataclass
 class CredentialAdded:
@@ -510,6 +586,44 @@ class CredentialAdded:
 
     @classmethod
     def from_json(cls, json: T_JSON_DICT) -> CredentialAdded:
+        return cls(
+            authenticator_id=AuthenticatorId.from_json(json["authenticatorId"]),
+            credential=Credential.from_json(json["credential"]),
+        )
+
+
+@event_class("WebAuthn.credentialDeleted")
+@dataclass
+class CredentialDeleted:
+    """
+    Triggered when a credential is deleted, e.g. through
+    PublicKeyCredential.signalUnknownCredential().
+    """
+
+    authenticator_id: AuthenticatorId
+    credential_id: str
+
+    @classmethod
+    def from_json(cls, json: T_JSON_DICT) -> CredentialDeleted:
+        return cls(
+            authenticator_id=AuthenticatorId.from_json(json["authenticatorId"]),
+            credential_id=str(json["credentialId"]),
+        )
+
+
+@event_class("WebAuthn.credentialUpdated")
+@dataclass
+class CredentialUpdated:
+    """
+    Triggered when a credential is updated, e.g. through
+    PublicKeyCredential.signalCurrentUserDetails().
+    """
+
+    authenticator_id: AuthenticatorId
+    credential: Credential
+
+    @classmethod
+    def from_json(cls, json: T_JSON_DICT) -> CredentialUpdated:
         return cls(
             authenticator_id=AuthenticatorId.from_json(json["authenticatorId"]),
             credential=Credential.from_json(json["credential"]),

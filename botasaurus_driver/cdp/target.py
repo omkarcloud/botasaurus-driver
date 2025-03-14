@@ -7,14 +7,14 @@
 
 from __future__ import annotations
 
+import enum
 import typing
 from dataclasses import dataclass
 
 from deprecated.sphinx import deprecated  # type: ignore
 
-from . import browser
-from . import page
-from .util import event_class, T_JSON_DICT
+from . import browser, page
+from .util import T_JSON_DICT, event_class
 
 
 class TargetID(str):
@@ -49,6 +49,7 @@ class SessionID(str):
 class TargetInfo:
     target_id: TargetID
 
+    #: List of types: https://source.chromium.org/chromium/chromium/src/+/main:content/browser/devtools/devtools_agent_host_impl.cc?ss=chromium&q=f:devtools%20-f:out%20%22::kTypeTab%5B%5D%22
     type_: str
 
     title: str
@@ -70,7 +71,7 @@ class TargetInfo:
     browser_context_id: typing.Optional[browser.BrowserContextID] = None
 
     #: Provides additional details for specific target types. For example, for
-    #: the type of "page", this may be set to "portal" or "prerender".
+    #: the type of "page", this may be set to "prerender".
     subtype: typing.Optional[str] = None
 
     def to_json(self) -> T_JSON_DICT:
@@ -127,7 +128,7 @@ class FilterEntry:
     A filter used by target query/discovery/auto-attach operations.
     """
 
-    #: If set, causes exclusion of mathcing targets from the list.
+    #: If set, causes exclusion of matching targets from the list.
     exclude: typing.Optional[bool] = None
 
     #: If not present, matches any type.
@@ -274,7 +275,7 @@ def expose_dev_tools_protocol(
 
     Injected object will be available as ``window[bindingName]``.
 
-    The object has the follwing API:
+    The object has the following API:
     - ``binding.send(json)`` - a method to send messages over the remote debugging protocol
     - ``binding.onmessage = json => handleMessage(json)`` - a callback that will be called for the protocol notifications and command responses.
 

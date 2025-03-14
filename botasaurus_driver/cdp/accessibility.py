@@ -11,10 +11,8 @@ import enum
 import typing
 from dataclasses import dataclass
 
-from . import dom
-from . import page
-from . import runtime
-from .util import event_class, T_JSON_DICT
+from . import dom, page, runtime
+from .util import T_JSON_DICT, event_class
 
 
 class AXNodeId(str):
@@ -315,6 +313,7 @@ class AXPropertyName(enum.Enum):
     - from 'activedescendant' to 'owns' - relationships between elements other than parent/child/sibling.
     """
 
+    ACTIONS = "actions"
     BUSY = "busy"
     DISABLED = "disabled"
     EDITABLE = "editable"
@@ -354,6 +353,7 @@ class AXPropertyName(enum.Enum):
     FLOWTO = "flowto"
     LABELLEDBY = "labelledby"
     OWNS = "owns"
+    URL = "url"
 
     def to_json(self) -> str:
         return self.value
@@ -563,7 +563,7 @@ def get_full_ax_tree(
     **EXPERIMENTAL**
 
     :param depth: *(Optional)* The maximum depth at which descendants of the root node should be retrieved. If omitted, the full tree is returned.
-    :param frame_id: *(Optional)* The frame for whose document the AX tree should be retrieved. If omited, the root frame is used.
+    :param frame_id: *(Optional)* The frame for whose document the AX tree should be retrieved. If omitted, the root frame is used.
     :returns:
     """
     params: T_JSON_DICT = dict()
@@ -668,7 +668,7 @@ def query_ax_tree(
     """
     Query a DOM node's accessibility subtree for accessible name and role.
     This command computes the name and role for all nodes in the subtree, including those that are
-    ignored for accessibility, and returns those that mactch the specified name and role. If no DOM
+    ignored for accessibility, and returns those that match the specified name and role. If no DOM
     node is specified, or the DOM node does not exist, the command returns an error. If neither
     ``accessibleName`` or ``role`` is specified, it returns all the accessibility nodes in the subtree.
 

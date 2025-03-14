@@ -13,9 +13,8 @@ from dataclasses import dataclass
 
 from deprecated.sphinx import deprecated  # type: ignore
 
-from . import page
-from . import runtime
-from .util import event_class, T_JSON_DICT
+from . import page, runtime
+from .util import T_JSON_DICT, event_class
 
 
 class NodeId(int):
@@ -88,16 +87,24 @@ class PseudoType(enum.Enum):
 
     FIRST_LINE = "first-line"
     FIRST_LETTER = "first-letter"
+    CHECK = "check"
     BEFORE = "before"
     AFTER = "after"
+    SELECT_ARROW = "select-arrow"
     MARKER = "marker"
     BACKDROP = "backdrop"
+    COLUMN = "column"
     SELECTION = "selection"
+    SEARCH_TEXT = "search-text"
     TARGET_TEXT = "target-text"
     SPELLING_ERROR = "spelling-error"
     GRAMMAR_ERROR = "grammar-error"
     HIGHLIGHT = "highlight"
     FIRST_LINE_INHERITED = "first-line-inherited"
+    SCROLL_MARKER = "scroll-marker"
+    SCROLL_MARKER_GROUP = "scroll-marker-group"
+    SCROLL_NEXT_BUTTON = "scroll-next-button"
+    SCROLL_PREV_BUTTON = "scroll-prev-button"
     SCROLLBAR = "scrollbar"
     SCROLLBAR_THUMB = "scrollbar-thumb"
     SCROLLBAR_BUTTON = "scrollbar-button"
@@ -111,6 +118,10 @@ class PseudoType(enum.Enum):
     VIEW_TRANSITION_IMAGE_PAIR = "view-transition-image-pair"
     VIEW_TRANSITION_OLD = "view-transition-old"
     VIEW_TRANSITION_NEW = "view-transition-new"
+    PLACEHOLDER = "placeholder"
+    FILE_SELECTOR_BUTTON = "file-selector-button"
+    DETAILS_CONTENT = "details-content"
+    PICKER = "picker"
 
     def to_json(self) -> str:
         return self.value
@@ -185,6 +196,22 @@ class LogicalAxes(enum.Enum):
 
     @classmethod
     def from_json(cls, json: str) -> LogicalAxes:
+        return cls(json)
+
+
+class ScrollOrientation(enum.Enum):
+    """
+    Physical scroll orientation
+    """
+
+    HORIZONTAL = "horizontal"
+    VERTICAL = "vertical"
+
+    def to_json(self) -> str:
+        return self.value
+
+    @classmethod
+    def from_json(cls, json: str) -> ScrollOrientation:
         return cls(json)
 
 
@@ -291,6 +318,8 @@ class Node:
 
     assigned_slot: typing.Optional[BackendNode] = None
 
+    is_scrollable: typing.Optional[bool] = None
+
     def to_json(self) -> T_JSON_DICT:
         json: T_JSON_DICT = dict()
         json["nodeId"] = self.node_id.to_json()
@@ -349,6 +378,8 @@ class Node:
             json["compatibilityMode"] = self.compatibility_mode.to_json()
         if self.assigned_slot is not None:
             json["assignedSlot"] = self.assigned_slot.to_json()
+        if self.is_scrollable is not None:
+            json["isScrollable"] = self.is_scrollable
         return json
 
     @classmethod
@@ -471,6 +502,35 @@ class Node:
                 if json.get("assignedSlot", None) is not None
                 else None
             ),
+            is_scrollable=(
+                bool(json["isScrollable"])
+                if json.get("isScrollable", None) is not None
+                else None
+            ),
+        )
+
+
+@dataclass
+class DetachedElementInfo:
+    """
+    A structure to hold the top-level node of a detached tree and an array of its retained descendants.
+    """
+
+    tree_node: Node
+
+    retained_node_ids: typing.List[NodeId]
+
+    def to_json(self) -> T_JSON_DICT:
+        json: T_JSON_DICT = dict()
+        json["treeNode"] = self.tree_node.to_json()
+        json["retainedNodeIds"] = [i.to_json() for i in self.retained_node_ids]
+        return json
+
+    @classmethod
+    def from_json(cls, json: T_JSON_DICT) -> DetachedElementInfo:
+        return cls(
+            tree_node=Node.from_json(json["treeNode"]),
+            retained_node_ids=[NodeId.from_json(i) for i in json["retainedNodeIds"]],
         )
 
 
@@ -871,7 +931,7 @@ def get_attributes(
     """
     Returns attributes for the specified node.
 
-    :param node_id: Id of the node to retrieve attibutes for.
+    :param node_id: Id of the node to retrieve attributes for.
     :returns: An interleaved array of node attribute names and values.
     """
     params: T_JSON_DICT = dict()
@@ -1344,6 +1404,29 @@ def get_top_layer_elements() -> (
     return [NodeId.from_json(i) for i in json["nodeIds"]]
 
 
+def get_element_by_relation(
+    node_id: NodeId, relation: str
+) -> typing.Generator[T_JSON_DICT, T_JSON_DICT, NodeId]:
+    """
+    Returns the NodeId of the matched element according to certain relations.
+
+    **EXPERIMENTAL**
+
+    :param node_id: Id of the node from which to query the relation.
+    :param relation: Type of relation to get.
+    :returns: NodeId of the element matching the queried relation.
+    """
+    params: T_JSON_DICT = dict()
+    params["nodeId"] = node_id.to_json()
+    params["relation"] = relation
+    cmd_dict: T_JSON_DICT = {
+        "method": "DOM.getElementByRelation",
+        "params": params,
+    }
+    json = yield cmd_dict
+    return NodeId.from_json(json["nodeId"])
+
+
 def redo() -> typing.Generator[T_JSON_DICT, T_JSON_DICT, None]:
     """
     Re-does the last undone action.
@@ -1609,6 +1692,23 @@ def get_file_info(
     return str(json["path"])
 
 
+def get_detached_dom_nodes() -> (
+    typing.Generator[T_JSON_DICT, T_JSON_DICT, typing.List[DetachedElementInfo]]
+):
+    """
+    Returns list of detached nodes
+
+    **EXPERIMENTAL**
+
+    :returns: The list of detached nodes
+    """
+    cmd_dict: T_JSON_DICT = {
+        "method": "DOM.getDetachedDomNodes",
+    }
+    json = yield cmd_dict
+    return [DetachedElementInfo.from_json(i) for i in json["detachedNodes"]]
+
+
 def set_inspected_node(
     node_id: NodeId,
 ) -> typing.Generator[T_JSON_DICT, T_JSON_DICT, None]:
@@ -1738,12 +1838,14 @@ def get_container_for_node(
     container_name: typing.Optional[str] = None,
     physical_axes: typing.Optional[PhysicalAxes] = None,
     logical_axes: typing.Optional[LogicalAxes] = None,
+    queries_scroll_state: typing.Optional[bool] = None,
 ) -> typing.Generator[T_JSON_DICT, T_JSON_DICT, typing.Optional[NodeId]]:
     """
     Returns the query container of the given node based on container query
-    conditions: containerName, physical, and logical axes. If no axes are
-    provided, the style container is returned, which is the direct parent or the
-    closest element with a matching container-name.
+    conditions: containerName, physical and logical axes, and whether it queries
+    scroll-state. If no axes are provided and queriesScrollState is false, the
+    style container is returned, which is the direct parent or the closest
+    element with a matching container-name.
 
     **EXPERIMENTAL**
 
@@ -1751,6 +1853,7 @@ def get_container_for_node(
     :param container_name: *(Optional)*
     :param physical_axes: *(Optional)*
     :param logical_axes: *(Optional)*
+    :param queries_scroll_state: *(Optional)*
     :returns: *(Optional)* The container node for the given node, or null if not found.
     """
     params: T_JSON_DICT = dict()
@@ -1761,6 +1864,8 @@ def get_container_for_node(
         params["physicalAxes"] = physical_axes.to_json()
     if logical_axes is not None:
         params["logicalAxes"] = logical_axes.to_json()
+    if queries_scroll_state is not None:
+        params["queriesScrollState"] = queries_scroll_state
     cmd_dict: T_JSON_DICT = {
         "method": "DOM.getContainerForNode",
         "params": params,
@@ -1793,6 +1898,31 @@ def get_querying_descendants_for_container(
     }
     json = yield cmd_dict
     return [NodeId.from_json(i) for i in json["nodeIds"]]
+
+
+def get_anchor_element(
+    node_id: NodeId, anchor_specifier: typing.Optional[str] = None
+) -> typing.Generator[T_JSON_DICT, T_JSON_DICT, NodeId]:
+    """
+    Returns the target anchor element of the given anchor query according to
+    https://www.w3.org/TR/css-anchor-position-1/#target.
+
+    **EXPERIMENTAL**
+
+    :param node_id: Id of the positioned element from which to find the anchor.
+    :param anchor_specifier: *(Optional)* An optional anchor specifier, as defined in https://www.w3.org/TR/css-anchor-position-1/#anchor-specifier. If not provided, it will return the implicit anchor element for the given positioned element.
+    :returns: The anchor element of the given anchor query.
+    """
+    params: T_JSON_DICT = dict()
+    params["nodeId"] = node_id.to_json()
+    if anchor_specifier is not None:
+        params["anchorSpecifier"] = anchor_specifier
+    cmd_dict: T_JSON_DICT = {
+        "method": "DOM.getAnchorElement",
+        "params": params,
+    }
+    json = yield cmd_dict
+    return NodeId.from_json(json["nodeId"])
 
 
 @event_class("DOM.attributeModified")
@@ -2005,6 +2135,28 @@ class TopLayerElementsUpdated:
     @classmethod
     def from_json(cls, json: T_JSON_DICT) -> TopLayerElementsUpdated:
         return cls()
+
+
+@event_class("DOM.scrollableFlagUpdated")
+@dataclass
+class ScrollableFlagUpdated:
+    """
+    **EXPERIMENTAL**
+
+    Fired when a node's scrollability state changes.
+    """
+
+    #: The id of the node.
+    node_id: NodeId
+    #: If the node is scrollable.
+    is_scrollable: bool
+
+    @classmethod
+    def from_json(cls, json: T_JSON_DICT) -> ScrollableFlagUpdated:
+        return cls(
+            node_id=NodeId.from_json(json["nodeId"]),
+            is_scrollable=bool(json["isScrollable"]),
+        )
 
 
 @event_class("DOM.pseudoElementRemoved")
