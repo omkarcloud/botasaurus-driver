@@ -42,6 +42,7 @@ def create(node: cdp.dom.Node, tab: Tab, tree: typing.Optional[cdp.dom.Node] = N
 
     return elem
 
+
 class Element:
     def __init__(self, node: cdp.dom.Node, tab: Tab, tree: cdp.dom.Node = None):
         """
@@ -67,7 +68,8 @@ class Element:
 
     @property
     def tag(self):
-        return self.node.node_name.lower()
+        if self.node_name:
+            return self.node_name.lower()
 
     @property
     def tag_name(self):
@@ -192,6 +194,13 @@ class Element:
     @property
     def tab(self):
         return self._tab
+    # TODO: check rthat child creation works.
+    @property
+    def shadow_children(self):
+        if self.shadow_roots:
+            root = self.shadow_roots[0]
+            if root.shadow_root_type == cdp.dom.ShadowRootType.OPEN_:
+                return [create(child, self.tab) for child in root.children]
 
     def __getattr__(self, item):
         # if attribute is not found on the element python object
@@ -201,10 +210,6 @@ class Element:
         x = getattr(self.attrs, item, None)
         if x:
             return x
-
-    #     x = getattr(self.node, item, None)
-    #
-    #     return x
 
     def __setattr__(self, key, value):
         if key[0] != "_":
@@ -228,6 +233,27 @@ class Element:
         # we probably deal with an attribute of
         # the html element, so forward it
         return self.attrs.get(item, None)
+
+    def save_to_dom(self):
+        """
+        saves element to dom
+        :return:
+        :rtype:
+        """
+        self._remote_object = self._tab.send(
+            cdp.dom.resolve_node(backend_node_id=self.backend_node_id)
+        )
+        self._tab.send(cdp.dom.set_outer_html(self.node_id, outer_html=str(self)))
+        self.update()
+
+    def remove_from_dom(self):
+        """removes the element from dom"""
+        self.update()  # ensure we have latest node_id
+        node = util.filter_recurse(
+            self._tree, lambda node: node.backend_node_id == self.backend_node_id
+        )
+        if node:
+            self.tab.send(cdp.dom.remove_node(node.node_id))
 
     def update(self, _node=None):
         """
@@ -254,13 +280,10 @@ class Element:
         """
         if _node:
             doc = _node
-            # self._node = _node
-            # self._children.clear()
             self._parent = None
         else:
             doc =  self._tab.send(cdp.dom.get_document(-1, True))
             self._parent = None
-        # if self.node_name != "IFRAME":
         updated_node = util.filter_recurse(
             doc, lambda n: n.backend_node_id == self._node.backend_node_id
         )
@@ -268,7 +291,7 @@ class Element:
             self._node = updated_node
         self._tree = doc
 
-        self._remote_object =  self._tab.send(
+        self._remote_object = self._tab.send(
             cdp.dom.resolve_node(backend_node_id=self._node.backend_node_id)
         )
         self.attrs.clear()
@@ -290,7 +313,6 @@ class Element:
     @property
     def tree(self) -> cdp.dom.Node:
         return self._tree
-        # raise RuntimeError("you should first call  `await update()` on this object to populate it's tree")
 
     @tree.setter
     def tree(self, tree: cdp.dom.Node):
@@ -372,13 +394,60 @@ class Element:
         
         x = center[0] -4
         y = center[1]- 4
-        self._tab.send(
-            cdp.input_.dispatch_mouse_event("mouseMoved", x=x, y=y)
-        )
+        self._tab.mouse_move(x,y)
         # self._tab.sleep(0.07)
         # self._tab.send(
         #     cdp.input_.dispatch_mouse_event("mouseReleased", x=center[0]-4, y=center[1]-4)
         # )
+    def mouse_drag(
+        self,
+        destination,
+        relative: bool = False,
+        steps: int = 1,
+    ):
+        """
+        drag an element to another element or target coordinates. dragging of elements should be supported  by the site of course
+
+
+        :param destination: another element where to drag to, or a tuple (x,y) of ints representing coordinate
+        :type destination: Element or coordinate as x,y tuple
+
+        :param relative: when True, treats coordinate as relative. for example (-100, 200) will move left 100px and down 200px
+        :type relative:
+
+        :param steps: move in <steps> points, this could make it look more "natural" (default 1),
+               but also a lot slower.
+               for very smooth action use 50-100
+        :type steps: int
+        :return:
+        :rtype:
+        """
+        try:
+            start_point = (self.get_position()).center
+        except AttributeError:
+            return
+        if not start_point:
+            return
+        end_point = None
+        if isinstance(destination, Element):
+            try:
+                end_point = (destination.get_position()).center
+            except AttributeError:
+                return
+            if not end_point:
+                return
+        elif isinstance(destination, (tuple, list)):
+            if relative:
+                end_point = (
+                    start_point[0] + destination[0],
+                    start_point[1] + destination[1],
+                )
+            else:
+                end_point = destination
+        self._tab.mouse_drag(
+            start_point, end_point, relative=relative, steps=steps
+        )
+
     def humane_click(self):
         """
         Click the element.
@@ -447,7 +516,6 @@ class Element:
             button=cdp.input_.MouseButton.LEFT,
             click_count=1
         ))        
-
     def click(self):
         """
         Click the element.
@@ -471,7 +539,6 @@ class Element:
                 return_by_value=True,
             )
         )
-
     def check_element(self):
         is_checked = self.apply("(el) => el.checked")
         if not is_checked:
@@ -514,6 +581,22 @@ class Element:
                     raise ElementWithSelectorNotFoundException(selector)
                 time.sleep(0.5)
             return item
+        
+    def get_js_attributes(self):
+        return json.loads(
+                self.apply(
+                    """
+            function (e) {
+                let o = {}
+                for(let k in e){
+                    o[k] = e[k]
+                }
+                return JSON.stringify(o)
+            }
+            """
+                )
+            
+        )
 
     def __call__(self, js_method):
         """
@@ -670,7 +753,7 @@ class Element:
     def clear_input(self, _until_event: type = None):
         """clears an input field"""
         self.raise_if_disconnected()
-        self.apply('function (element) { element.value = "" } ')
+        self.apply('function (el) { el.value = "" } ')
         self.update()
 
     def raise_if_disconnected(self):
@@ -709,7 +792,6 @@ class Element:
             self._tab.send(cdp.input_.dispatch_key_event("char", text=char))
 
         self.update()
-
     def send_file(self, *file_paths):
         """
         some form input require a file (upload), a full path needs to be provided.
@@ -732,6 +814,47 @@ class Element:
             )
         )
 
+    def focus(self):
+        """focus the current element. often useful in form (select) fields"""
+        return self.apply("(el) => el.focus()")
+
+    def perform_select_option(self):
+        """
+        for form (select) fields. when you have queried the options you can call this method on the option object.
+        02/08/2024: fixed the problem where events are not fired when programattically selecting an option.
+
+        calling :func:`option.select_option()` will use that option as selected value.
+        does not work in all cases.
+
+        """
+
+
+
+        if self.node_name == "OPTION":
+            self.apply(
+                """
+                (o) => {  
+                    o.selected = true ; 
+                    o.dispatchEvent(new Event('change', {view: window,bubbles: true}))
+                }
+                """
+            )
+
+    def set_value(self, value):
+        self.apply("(el) => el.value=args", value)
+
+    def set_text(self, value):
+        if not self.node_type == 3:
+            if self.child_node_count == 1:
+                child_node = self.children[0]
+                child_node.set_text(value)
+                self.update()
+                return
+            else:
+                raise RuntimeError("Can only set value of text nodes")
+        self.update()
+        self._tab.send(cdp.dom.set_node_value(node_id=self.node_id, value=value))
+
     def get_html(self):
         self.raise_if_disconnected()
 
@@ -739,7 +862,7 @@ class Element:
             cdp.dom.get_outer_html(backend_node_id=self.backend_node_id)
         )
     @property
-    def text(self):
+    def text(self) -> str:
         """
         gets the text contents of this element
         note: this includes text in the form of script content, as those are also just 'text nodes'
@@ -773,7 +896,9 @@ class Element:
         # return self.tab.query_selector_all(selector, _node=self)
         return self.tab.select_all(selector, timeout, node_name=node_name, _node=self)
 
-    def query_selector(self, selector, timeout):
+        
+
+    def query_selector(self, selector, timeout = 10):
         """
         like js querySelector()
         """
@@ -781,6 +906,7 @@ class Element:
 
         self.update()
         return self.tab.select(selector, timeout, self)
+
 
     def save_screenshot(
         self,
@@ -925,6 +1051,34 @@ class Element:
                 user_gesture=True,
             )
         )
+
+    def highlight_overlay(self):
+        """
+        highlights the element devtools-style. To remove the highlight,
+        call the method again.
+        :return:
+        :rtype:
+        """
+
+        if getattr(self, "_is_highlighted", False):
+            del self._is_highlighted
+            self.tab.send(cdp.overlay.hide_highlight())
+            self.tab.send(cdp.dom.disable())
+            self.tab.send(cdp.overlay.disable())
+            return
+        self.tab.send(cdp.dom.enable())
+        self.tab.send(cdp.overlay.enable())
+        conf = cdp.overlay.HighlightConfig(
+            show_info=True, show_extension_lines=True, show_styles=True
+        )
+        self.tab.send(
+            cdp.overlay.highlight_node(
+                highlight_config=conf, backend_node_id=self.backend_node_id
+            )
+        )
+        setattr(self, "_is_highlighted", 1)
+
+
     def download_video(self, filename, duration: typing.Optional[typing.Union[int, float]] = None):
         """
         experimental option.
@@ -984,12 +1138,12 @@ class Element:
         self.apply('(vid) => vid.play()')
         self._tab
         return relative_path
-
     def is_video_downloaded(self):
         isrecording = self.apply('(vid) => vid["_recording"]')
         if isrecording is None:
             return False
         return not isrecording and self.video_download_path and os.path.exists(self.video_download_path)
+
     def _make_attrs(self):
         sav = None
         if self.node.attributes:

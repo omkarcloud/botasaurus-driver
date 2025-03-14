@@ -2,62 +2,52 @@ from collections.abc import Mapping as _Mapping, Sequence as _Sequence
 
 
 class ContraDict(dict):
-    """ """
+    """
+    directly inherited from dict
+
+    accessible by attribute. o.x == o['x']
+    This works also for all corner cases.
+
+    native json.dumps and json.loads work with it
+
+    names like "keys", "update", "values" etc won't overwrite the methods,
+    but will just be available using dict lookup notation obj['items'] instead of obj.items
+
+    all key names are converted to snake_case
+    hyphen's (-), dot's (.) or whitespaces are replaced by underscore (_)
+
+    autocomplete works even if the objects comes from a list
+
+    recursive action. dict assignments will be converted too.
+    """
 
     __module__ = None
-    __hide_properties__ = False
 
     def __init__(self, *args, **kwargs):
-
         super().__init__()
-        silent = False
-        try:
-            silent = kwargs.pop("silent")
-        except:  # noqa
-            pass
+        silent = kwargs.pop("silent", False)
+        _ = dict(*args, **kwargs)
 
-        _ = dict(
-            {
-                k: v
-                for k, v in self.__class__.__dict__.items()
-                if (
-                    type(k) is str
-                    and not k.startswith("_")
-                    and not callable(v)
-                    and k not in self.__class__.__dict__
-                )
-            }
-        )
-        _.update(*args, **kwargs)
-
+        # for key, val in dict(*args, **kwargs).items():
+        #     _[key] = val
         super().__setattr__("__dict__", self)
         for k, v in _.items():
-            _check_key(k, self, False, silent)
+            _check_key(k, False, silent)
             super().__setitem__(k, _wrap(self.__class__, v))
 
     def __setitem__(self, key, value):
         super().__setitem__(key, _wrap(self.__class__, value))
-        # self[key] = _wrap(self.__class__, value)
 
     def __setattr__(self, key, value):
         super().__setitem__(key, _wrap(self.__class__, value))
 
     def __getattribute__(self, attribute):
-        if not _check_key(attribute, self, True, silent=True):
-            # try:
+        if attribute in self:
+            return self[attribute]
+        if not _check_key(attribute, True, silent=True):
             return getattr(super(), attribute)
-            # except:
-            #     raise
-        return object.__getattribute__(self, attribute)
 
-    def __dir__(self):
-        import inspect
-        a = list(self.keys())
-        if self.__hide_properties__:
-            a += [
-                _ for _ in super().__dir__() if inspect.ismethod(getattr(self, _, None))
-            ]
-        return a
+        return object.__getattribute__(self, attribute)
 
 
 def _wrap(cls, v):
@@ -67,9 +57,8 @@ def _wrap(cls, v):
     elif isinstance(v, _Sequence) and not isinstance(
         v, (str, bytes, bytearray, set, tuple)
     ):
-        v = list([_wrap(cls, x) for x in v])
+        v = [_wrap(cls, x) for x in v]  # Optimized list comprehension
     return v
-
 
 _warning_names = (
     "items",
@@ -80,31 +69,18 @@ _warning_names = (
     "copy",
     "fromkeys",
     "get",
-    "items",
-    "keys",
     "pop",
     "popitem",
     "setdefault",
-    "update",
-    "values",
     "class",
 )
-
 _warning_names_message = """\n\
-    ------------\n\
-    this is just a warning. not an error\n\
-    ------------\n\
-    a key named '{0}' has been found, which might behave unexpected.\n
-    it either matches a internal method name or contains hyphen(s) or period(s).\n
-    you will only be able to look it up using key, eg. myobject['{0}'].
-    myobject.{0} will not work with that name.
-    \n
-    offending name found in :\n
-    {1}\n\n\
+    While creating a ContraDict object, a key offending key name '{0}' has been found, which might behave unexpected.
+    you will only be able to look it up using key, eg. myobject['{0}']. myobject.{0} will not work with that name.
     """
 
 
-def _check_key(key: str, mapping: _Mapping, boolean: bool = False, silent=False):
+def _check_key(key: str,  boolean: bool = False, silent=False):
     """checks `key` and warns if needed
 
     :param key:
@@ -118,7 +94,7 @@ def _check_key(key: str, mapping: _Mapping, boolean: bool = False, silent=False)
         return key
     if key.lower() in _warning_names or any(_ in key for _ in ("-", ".")):
         if not silent:
-            print(_warning_names_message.format(key, {key: mapping}))
+            print(_warning_names_message.format(key))
         e = True
     if not boolean:
         return key

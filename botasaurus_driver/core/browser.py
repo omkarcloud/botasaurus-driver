@@ -16,7 +16,7 @@ from .config import PathLike, Config, free_port, is_posix
 from .connection import Connection
 from .custom_storage_cdp import get_cookies, set_cookies
 from .env import is_docker
-
+from time import sleep
 import os
 import signal
 
@@ -173,6 +173,40 @@ class Browser:
         return True
         # return (self._process and self._process.returncode) or False
 
+
+    def fix_browser(self, connection):
+        if self.config.headless:
+            response, error = connection.send(
+                cdp.runtime.evaluate(
+                expression="navigator.userAgent",
+                user_gesture=True,
+                await_promise=True,
+                return_by_value=True,
+                allow_unsafe_eval_blocked_by_csp=True,
+            )
+            )
+            if response and response.value:
+                ua = response.value
+                connection.send(
+                    cdp.network.set_user_agent_override(
+                        user_agent=ua.replace("Headless", ""),
+                    )
+                )
+        if self.config.block_images_and_css:
+            connection.block_images_and_css()
+        if self.config.block_images:
+            connection.block_images()
+
+    def wait(self, time: Union[float, int] = 1) -> Browser:
+        """wait for <time> seconds. important to use, especially in between page navigation
+
+        :param time:
+        :return:
+        """
+        return sleep(time)
+
+    sleep = wait
+    """alias for wait"""
     def _handle_target_update(
         self,
         event: Union[
@@ -194,7 +228,6 @@ class Browser:
             )
             # todo: maybe connections need to be reinited?
             current_tab.target = target_info
-
         elif isinstance(event, cdp.target.TargetCreated):
             target_info: cdp.target.TargetInfo = event.target_info
             from .tab import Tab
@@ -202,12 +235,15 @@ class Browser:
             new_target = Tab(
                 (
                     f"ws://{self.config.host}:{self.config.port}"
-                    f"/devtools/page"  # all types are 'page' internally in chrome apparently
+                    f"/devtools/{target_info.type_ or 'page'}"  # all types are 'page' internally in chrome apparently
                     f"/{target_info.target_id}"
                 ),
                 target=target_info,
                 browser=self,
             )
+            if target_info.type_ == 'page':
+                self.fix_browser(new_target)
+
             self.targets.append(new_target)
 
         elif isinstance(event, cdp.target.TargetDestroyed):
@@ -243,23 +279,28 @@ class Browser:
                 )
             )
             # get the connection matching the new target_id from our inventory
-            connection = next(
+            connection:Connection = next(
                 filter(
                     lambda item: item.type_ == "page" and item.target_id == target_id,
                     self.targets,
                 )
             )
+            connection.browser = self
 
         else:
             # first tab from browser.tabs
-            connection = next(filter(lambda item: item.type_ == "page", self.targets))
+            connection = self.get_first_tab()
             # use the tab to navigate to new url
             frame_id, _, *_ = connection.send(cdp.page.navigate(url, referrer=referrer))
             # update the frame_id on the tab
             connection.frame_id = frame_id
+            connection.browser = self
 
         time.sleep(0.25)
         return connection
+
+    def get_first_tab(self):
+        return next(filter(lambda item: item.type_ == "page", self.targets))
 
     def start(self=None) -> Browser:
 
@@ -309,7 +350,6 @@ class Browser:
                 stderr=subprocess.DEVNULL,
                 close_fds=is_posix,
             )
-
             chrome_url = f"http://{self.config.host}:{self.config.port}/json/version"
             try:
                 self.info = ensure_chrome_is_alive(chrome_url)
@@ -319,6 +359,44 @@ class Browser:
                 raise
 
         run()
+
+    def grant_all_permissions(self):
+        """
+        grant permissions for:
+            accessibilityEvents
+            audioCapture
+            backgroundSync
+            backgroundFetch
+            clipboardReadWrite
+            clipboardSanitizedWrite
+            displayCapture
+            durableStorage
+            geolocation
+            idleDetection
+            localFonts
+            midi
+            midiSysex
+            nfc
+            notifications
+            paymentHandler
+            periodicBackgroundSync
+            protectedMediaIdentifier
+            sensors
+            storageAccess
+            topLevelStorageAccess
+            videoCapture
+            videoCapturePanTiltZoom
+            wakeLockScreen
+            wakeLockSystem
+            windowManagement
+        """
+        permissions = list(cdp.browser.PermissionType)
+        permissions.remove(cdp.browser.PermissionType.FLASH)
+        permissions.remove(cdp.browser.PermissionType.ACCESSIBILITY_EVENTS)
+        permissions.remove(cdp.browser.PermissionType.VIDEO_CAPTURE_PAN_TILT_ZOOM)
+        
+        permissions.remove(cdp.browser.PermissionType.CAPTURED_SURFACE_CONTROL)
+        self.connection.send(cdp.browser.grant_permissions(permissions))
 
     def _get_targets(self) -> List[cdp.target.TargetInfo]:
         info = self.connection.send(cdp.target.get_targets(), _is_update=True)
@@ -334,8 +412,6 @@ class Browser:
                     existing_tab.target.__dict__.update(t.__dict__)
                     break
             else:
-                # new target
-                # print("Making a New Connection")
                 self.targets.append(
                     Connection(
                         (
@@ -359,6 +435,30 @@ class Browser:
     def __iter__(self):
         self._i = self.tabs.index(self.main_tab)
         return self
+
+    def __getitem__(self, item: Union[str, int]):
+        """
+        allows to get py:obj:`tab.Tab` instances by using browser[0], browser[1], etc.
+        a string is also allowed. it will then return the first tab where the py:obj:`cdp.target.TargetInfo` object
+        (as json string) contains the given key, or the first tab in case no matches are found. eg:
+        `browser["google"]` gives the first tab which has "google" in it's serialized target object.
+
+        :param item:
+        :type item:
+        :return:
+        :rtype: tab.Tab
+        """
+        if isinstance(item, int):
+            return self.tabs[item]
+        if isinstance(item, str):
+            for t in self.tabs:
+                if item.lower() in str(t.target.to_json()).lower():
+                    return t
+            else:
+                return self.tabs[0]
+
+    def __reversed__(self):
+        return reversed(list(self.tabs))
 
     def __next__(self):
         try:
@@ -403,7 +503,8 @@ class Browser:
         try:
             if self.connection:
                 self.connection.close()
-                self.connection = None
+                # Fixed a bug. here
+                # self.connection = None
         except Exception as e:
             print(e)
 
@@ -425,7 +526,6 @@ class Browser:
 
     def __del__(self):
         pass
-
 
 class CookieJar:
     def __init__(self, browser: Browser):

@@ -1,13 +1,17 @@
+import json
 from random import uniform
 from datetime import datetime
 from time import sleep
 import time
-from typing import Optional, Union, List, Any
+from typing import Callable, Optional, Union, List, Any
+
+from .exceptions import ChromeException
 
 from .core.config import Config
-from .core.custom_storage_cdp import block_urls, enable_network
 from .tiny_profile import load_cookies, save_cookies
 from . import cdp
+from .core._contradict import ContraDict
+
 
 from .beep_utils import beep_input
 from .driver_utils import (
@@ -23,7 +27,6 @@ from .exceptions import (
     CheckboxElementForLabelNotFoundException,
     DetachedElementException,
     ElementWithTextNotFoundException,
-    IframeNotFoundException,
     InputElementForLabelNotFoundException,
     InvalidProfileException,
     NoProfileException,
@@ -43,13 +46,6 @@ class Wait:
     LONG = 8
     VERY_LONG = 16
 
-def generate_random_string(length: int = 32) -> str:
-    import random
-    import string
-    letters = string.ascii_letters
-    return ''.join(random.choice(letters) for i in range(length))
-
-
 def _get_iframe_tab(driver, internal_elem):
     iframe_tab = None
     all_targets = driver._browser.targets
@@ -68,22 +64,22 @@ def get_iframe_tab(driver, internal_elem):
     if iframe_tab:
         return iframe_tab
 
-    start_time = time.time()
-    timeout = 8
+    # start_time = time.time()
+    # timeout = 8
 
-    while True:
-        iframe_tab = _get_iframe_tab(driver, internal_elem)
-        if iframe_tab:
-            return iframe_tab
+    # while True:
+    #     iframe_tab = _get_iframe_tab(driver, internal_elem)
+    #     if iframe_tab:
+    #         return iframe_tab
 
-        driver._update_targets()
+    #     driver._update_targets()
 
-        if time.time() - start_time > timeout:
-            internal_frame_id = str(internal_elem.frame_id)
-            raise IframeNotFoundException(internal_frame_id)
+    #     if time.time() - start_time > timeout:
+    #         internal_frame_id = str(internal_elem.frame_id)
+    #         raise IframeNotFoundException(internal_frame_id)
 
-        time.sleep(0.1)
-        # time.sleep(2)
+    #     time.sleep(0.1)
+    #     # time.sleep(2)
 
 
 def wait_for_iframe_tab_load(driver, iframe_tab):
@@ -91,11 +87,29 @@ def wait_for_iframe_tab_load(driver, iframe_tab):
     # wait_till_document_is_ready(iframe_tab, True)
 
 
-def create_iframe_element(driver, internal_elem):
-    iframe_tab = get_iframe_tab(driver, internal_elem)
-    wait_for_iframe_tab_load(driver, iframe_tab)
+def get_iframe_element_or_tab(iframe_tab, driver, current_tab, internal_elem):
+    if iframe_tab:
+        wait_for_iframe_tab_load(driver, iframe_tab)
+        return IframeTab(driver.config, iframe_tab, driver._browser)
+        
+    elem = Element(driver, current_tab, internal_elem)
+    return IframeElement(elem, driver.config, current_tab, driver._browser)
 
-    return IframeElement(driver.config, iframe_tab, driver._browser)
+def create_iframe_element(driver, current_tab, internal_elem):
+    iframe_tab = get_iframe_tab(driver, internal_elem)
+    return get_iframe_element_or_tab(iframe_tab, driver, current_tab, internal_elem)
+
+
+def get_iframe_elem_by_link(driver, link, timeout):
+    iframe_tab = get_iframe_tab_by_link(driver, link, timeout)
+    if iframe_tab:
+        return get_iframe_element_or_tab(iframe_tab, driver, None, None)
+    # TODO: FIX THIS 
+    # else 
+        # select iframes 
+        # find url
+        # return it making elem. 
+    return None
 
 
 def matches_regex(s, pattern):
@@ -141,19 +155,12 @@ def get_iframe_tab_by_link(driver, link, timeout):
             time.sleep(0.1)
 
 
-def get_iframe_elem_by_link(driver, link, timeout):
-    iframe_tab = get_iframe_tab_by_link(driver, link, timeout)
-    if iframe_tab:
-        wait_for_iframe_tab_load(driver, iframe_tab)
-        return IframeElement(driver.config, iframe_tab, driver._browser)
-    return None
-
 
 def make_element(driver, current_tab, internal_elem):
     if not internal_elem:
         return None
     if internal_elem._node.node_name == "IFRAME":
-        return create_iframe_element(driver, internal_elem)
+        return create_iframe_element(driver,current_tab, internal_elem)
     else:
         return Element(driver, current_tab, internal_elem)
 
@@ -172,8 +179,30 @@ def get_all_parents(node):
     return parents
 
 
+def perform_select_options(select_element:'Element', value, index, label, ):
+        if value is None and index is None and label is None:
+            raise ValueError("One of 'value', 'index', or 'label' must be provided.")
+        if value is not None:
+            if isinstance(value, list):
+                for v in value:
+                    select_element.select(f"option[value='{v}']")._elem. perform_select_option()
+            else:
+                select_element.select(f"option[value='{value}']")._elem.perform_select_option()
+        elif index is not None:
+            if isinstance(index, list):
+                for i in index:
+                    select_element.select(f"option:nth-child({i + 1})")._elem.perform_select_option()
+            else:
+                select_element.select(f"option:nth-child({index + 1})")._elem.perform_select_option()
+        elif label is not None:
+            if isinstance(label, list):
+                for l in label:
+                    select_element.select(f"option[label='{l}']")._elem.perform_select_option()
+            else:
+                select_element.select(f"option[label='{label}']")._elem.perform_select_option()
+
 class Element:
-    def __init__(self, driver, tab: Tab, elem: CoreElement):
+    def __init__(self, driver:'BrowserTab', tab: Tab, elem: CoreElement):
         self._driver = driver
         self._tab = tab
         self._elem: CoreElement = elem
@@ -224,6 +253,15 @@ class Element:
             return self.value
         return self.attributes.get(attribute)
 
+    # def get_js_properties(self) -> dict:
+    #     """
+    #     Retrieves the JavaScript properties of the element.
+
+    #     Returns:
+    #         dict: A dictionary containing the JavaScript properties of the element.
+    #     """
+    #     return self._elem.get_js_attributes()
+    
     def get_bounding_rect(self, absolute=False):
         return self._elem.get_position(absolute)
 
@@ -284,11 +322,112 @@ class Element:
             self.wait_for_element(selector, wait).type(text)
         else:
             self._tab._run(self._elem.send_keys(text))
-    # def clear(self, selector: Optional[str] = None, wait: Optional[int] = Wait.SHORT) -> None:
-    #     if selector:
-    #         self.wait_for_element(selector, wait).clear()
-    #     else:
-    #         self._tab._run(self._elem.clear_input())
+
+    def clear(self, selector: Optional[str] = None, wait: Optional[int] = Wait.SHORT) -> None:
+        """
+        Clears the input field of a web element.
+        If a selector is provided, it waits for the element to be present and then clears its input field.
+        If no selector is provided, it clears the input field of the current element.
+        Args:
+            selector (Optional[str]): The CSS selector of the element to clear. Defaults to None.
+            wait (Optional[int]): The amount of time to wait for the element to be present. Defaults to Wait.SHORT.
+        Returns:
+            None
+        """
+
+        if selector:
+            self.wait_for_element(selector, wait).clear()
+        else:
+            self._tab._run(self._elem.clear_input())
+
+    def focus(self, selector: Optional[str] = None, wait: Optional[int] = Wait.SHORT) -> None:
+        """
+        Focuses on the element specified by the selector or the current element.
+
+        Args:
+            selector (Optional[str], optional): The CSS selector of the element to focus on. Defaults to None.
+            wait (Optional[int], optional): The time to wait for the element to be available. Defaults to Wait.SHORT.
+
+        Returns:
+            None
+        """
+        if selector:
+            self.wait_for_element(selector, wait).focus()
+        else:
+            self._tab._run(self._elem.focus())
+
+
+    def set_value(self, value: str) -> None:
+        """
+        Sets the value of the element.
+
+        Args:
+            value (str): The value to set for the element.
+
+        Returns:
+            None
+        """
+        self._tab._run(self._elem.set_value(value))
+
+    def set_text(self, text: str) -> None:
+        """
+        Sets the text content of the element.
+
+        Args:
+            text (str): The text to set for the element.
+
+        Returns:
+            None
+        """
+        self._tab._run(self._elem.set_text(text))
+
+    def check_element(
+        self, selector: Optional[str] = None, wait: Optional[int] = Wait.SHORT
+    ) -> None:
+        if selector:
+            self.wait_for_element(selector, wait).check_element()
+        else:
+            self._tab._run(self._elem.check_element())
+
+    def uncheck_element(
+        self, selector: Optional[str] = None, wait: Optional[int] = Wait.SHORT
+    ) -> None:
+        if selector:
+            self.wait_for_element(selector, wait).uncheck_element()
+        else:
+            self._tab._run(self._elem.uncheck_element())
+
+    def select_option(
+        self,
+        selector: str,
+        value: Optional[Union[str, List[str]]] = None,
+        index: Optional[Union[int, List[int]]] = None,
+        label: Optional[Union[str, List[str]]] = None,
+        wait: Optional[int] = Wait.SHORT,
+    ) -> None:
+        """
+        Selects an option from a dropdown element.
+
+        Args:
+            selector (str): The CSS selector for the dropdown element.
+            value (Optional[Union[str, List[str]]], optional): The value(s) of the option(s) to select. Defaults to None.
+            index (Optional[Union[int, List[int]]], optional): The index/indices of the option(s) to select. Defaults to None.
+            label (Optional[Union[str, List[str]]], optional): The label(s) of the option(s) to select. Defaults to None.
+            wait (Optional[int], optional): The time to wait for the element to be available. Defaults to Wait.SHORT.
+
+        Raises:
+            ValueError: If none of 'value', 'index', or 'label' is provided.
+
+        Returns:
+            None
+            
+        Example:
+            driver.get("https://www.digitaldutch.com/unitconverter/length.htm")
+            driver.select('#calculator').select_option("select#selectFrom", index=17)
+            driver.prompt()            
+        """
+        select_element = self.wait_for_element(selector, wait)
+        perform_select_options(select_element, value, index, label, )
 
     def is_element_present(
         self, selector: str, wait: Optional[int] = Wait.SHORT
@@ -403,22 +542,30 @@ class Element:
             self._tab,
             self._tab._run(self._elem.wait_for(selector, timeout=wait)),
         )
+    
+    def remove(self) -> None:
+        """
+        Removes the element from the DOM.
+        """
+        self._elem.remove_from_dom()
 
-    def check_element(
-        self, selector: Optional[str] = None, wait: Optional[int] = Wait.SHORT
-    ) -> None:
-        if selector:
-            self.wait_for_element(selector, wait).check_element()
-        else:
-            self._tab._run(self._elem.check_element())
+    # def drag_element_to(self, destination: Union[str, 'Element'], wait: Optional[int] = Wait.SHORT) -> None:
+    #     """
+    #     Drags the current element to the specified destination element or selector.
 
-    def uncheck_element(
-        self, selector: Optional[str] = None, wait: Optional[int] = Wait.SHORT
-    ) -> None:
-        if selector:
-            self.wait_for_element(selector, wait).uncheck_element()
-        else:
-            self._tab._run(self._elem.uncheck_element())
+    #     Args:
+    #         destination (Union[str, 'Element']): The target element or selector to drag the current element to.
+    #         wait (Optional[int], optional): The time to wait for the destination element to be available. Defaults to Wait.SHORT.
+
+    #     Returns:
+    #         None
+    #     """
+    #     if isinstance(destination, str):
+    #         destination_el = self._driver.wait_for_element(destination, wait)
+    #     else:
+    #         destination_el = destination
+    #     self._elem.mouse_drag(destination_el._elem)
+
 
     def scroll_to_bottom(self, smooth_scroll: bool = True) -> None:
         if smooth_scroll:
@@ -491,17 +638,6 @@ class Element:
           return self._tab._run(self._elem.apply(script,args=args,))
         except Exception as e:
           print('An exception occurred')
-        
-
-
-def get_inside_input_selector(type):
-    if type == "text":
-        return "input,textarea"
-    elif type == "checkbox":
-        return "input"
-    else:
-        return "input,textarea,select"
-
 
 def get_for_input_selector(type, for_attr):
     if type == "text":
@@ -523,6 +659,16 @@ def get_title_safe(driver):
             except DetachedElementException:
                 print("Title element is detached, Regetting")
                 pass
+            
+def get_inside_input_selector(type):
+    if type == "text":
+        return "input,textarea"
+    elif type == "checkbox":
+        return "input"
+    else:
+        return "input,textarea,select"
+
+
 def get_input_el(driver, label, wait, type):
     els = driver.get_all_elements_containing_text(label, wait=wait)
     # Prioritize Label Elements
@@ -562,31 +708,94 @@ def get_input_el(driver, label, wait, type):
     return None
 
 
-def block_if_should(driver):
-    if driver.config.block_images_and_css:
-        driver.block_images_and_css()
-    elif driver.config.block_images:
-        driver.block_images()
+
+
+
+def base64_decode(encoded_str):
+    from base64 import b64decode
+    """
+    Decodes a base64 encoded string.
+    
+    :param encoded_str: A base64 encoded string.
+    :return: The decoded string.
+    """
+    # Decoding the base64 encoded string
+    decoded_bytes = b64decode(encoded_str)
+    # Converting the bytes to string
+    decoded_str = decoded_bytes.decode("utf-8")
+
+    return decoded_str
+
+class Response(ContraDict):
+    def __init__(self, request_id, content, is_base_64):
+        self.request_id = request_id
+        self.content = content
+        self.is_base_64 = is_base_64
+        super().__init__(self.to_dict())
+
+    def to_dict(self):
+        return {
+            "request_id": self.request_id,
+            "content": self.content,
+            "is_base_64": self.is_base_64,
+        }
+
+    def get_decoded_content(self):
+        """
+        Decodes the content if it's Base64 encoded, otherwise returns it as-is.
+        """
+        if self.is_base_64:
+            try:
+                return base64_decode(self.content)
+            except Exception as e:
+                raise ValueError(f"Error decoding base64 content: {e}")
+        return self.content
+
+    def get_json_content(self):
+        """
+        Attempts to parse the content as JSON.
+        """
+        try:
+            return json.loads(self.get_decoded_content())
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Error decoding JSON content: {e}")
+
+    def __repr__(self):
+        return f"Response(request_id={self.request_id}, content={self.content}, is_base_64={self.is_base_64})"
+
+class Responses(list):
+        def __init__(self, driver:'Driver'):
+            super().__init__()
+            self.driver = driver
+
+        def collect(self):
+            return self.driver.collect_responses(self)
+
+
+def generate_random_string(length: int = 32) -> str:
+    import random
+    import string
+    letters = string.ascii_letters
+    return ''.join(random.choice(letters) for i in range(length))
 
 
 _user_agent = None
 
 
-class DriverBase:
-    def __init__(self, config, _tab_value, _browser):
+class BrowserTab:
+    def __init__(self, config, _tab_value:Tab, _browser:Browser):
         self.config = config
         self._tab_value = _tab_value
-        self._browser = _browser
+        self._browser:Browser = _browser
         self.native_fetch_name = None
-
+        self.responses = Responses(self)
     def _run(self, coro):
         return coro
 
     @property
     def _tab(self) -> Tab:
         if not self._tab_value:
-            self.get("about:blank")
-
+            return self._browser.get_first_tab()
         return self._tab_value
 
     @_tab.setter
@@ -596,13 +805,6 @@ class DriverBase:
     @property
     def current_url(self):
         return self.run_js("return window.location.href")
-
-    @property
-    def user_agent(self):
-        global _user_agent
-        if not _user_agent:
-            _user_agent = self.run_js("return navigator.userAgent")
-        return _user_agent
 
     @property
     def title(self):
@@ -626,128 +828,15 @@ class DriverBase:
     def local_storage(self):
         return LocalStorage(self)
 
-    @property
-    def profile(self):
-        from .profile import Profile
-
-        if not self.config.profile:
-            raise NoProfileException()
-        return Profile(self.config.profile)
-
-    @profile.setter
-    def profile(self, value):
-        from .profile import Profiles
-
-        if not self.config.profile:
-            raise NoProfileException()
-
-        if value is None:
-            Profiles.delete_profile(self.config.profile)
-        elif isinstance(value, dict):
-            Profiles.set_profile(self.config.profile, value)
-        else:
-            raise InvalidProfileException()
 
     def _update_targets(self):
         return self._run(self._browser.update_targets())
 
-    def get(self, link: str, bypass_cloudflare=False, wait: Optional[int] = None, timeout=30) -> Tab:
-        self._tab = self._run(self._browser.get(link))
-        self.sleep(wait)
-        wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load, timeout=timeout)
-        if bypass_cloudflare:
-            self.detect_and_bypass_cloudflare()
-        block_if_should(self)
-        return self._tab
 
-    def open_link_in_new_tab(self, link: str, bypass_cloudflare=False, wait: Optional[int] = None, timeout=30) -> Tab:
-        self._tab = self._run(self._browser.get(link, new_tab=True))
-        self.sleep(wait)
-        wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load, timeout=timeout)
-        if bypass_cloudflare:
-            self.detect_and_bypass_cloudflare()
-        block_if_should(self)
-        return self._tab
-        
-    def reload(self):
-        self.get(self.current_url)
-
-    def get_via(
-        self,
-        link: str,
-        referer: str,
-        bypass_cloudflare=False,
-        wait: Optional[int] = None,
-        timeout=30,
-    ) -> Tab:
-
-        referer = referer.rstrip("/") + "/"
-        self._tab = self._run(self._browser.get(link, referrer=referer))
-
-        self.sleep(wait)
-
-        wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load, timeout=timeout)
-
-        if bypass_cloudflare:
-            self.detect_and_bypass_cloudflare()
-        block_if_should(self)
-        return self._tab
-
-    def google_get(
-        self,
-        link: str,
-        bypass_cloudflare=False,
-        wait: Optional[int] = None,
-        accept_google_cookies: bool = False,
-        timeout=30,
-    ) -> Tab:
-        if accept_google_cookies:
-            # No need to accept cookies multiple times
-            if (
-                hasattr(self, "has_accepted_google_cookies")
-                and self.has_accepted_google_cookies
-            ):
-                pass
-            else:
-                self.get("https://www.google.com/")
-                if '/sorry/' in self.current_url:
-                    print('Blocked by Google')
-                else:
-                    perform_accept_google_cookies_action(self)
-                    self.has_accepted_google_cookies = True
-        self.get_via(
-            link,
-            "https://www.google.com/",
-            bypass_cloudflare=bypass_cloudflare,
-            wait=wait,
-            timeout=timeout,
-        )
-        return self._tab
-
-    def get_via_this_page(
-        self, link: str, bypass_cloudflare=False, wait: Optional[int] = None, timeout=30
-    ) -> Tab:
-        currenturl = self.current_url
-        self.run_js(f'window.location.href = "{link}";')
-        if currenturl != link:
-            while True:
-                if currenturl != self.current_url:
-                    break
-                sleep(0.1)
-        self.sleep(wait)
-
-        wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load, timeout=timeout)
-
-        if bypass_cloudflare:
-            self.detect_and_bypass_cloudflare()
-
-        block_if_should(self)
-        return self._tab
-
-    def switch_to_tab(
-        self, tab: Tab
-    ) -> Tab:
-        self._tab = tab
+    def prevent_fetch_spying(self) -> Any:
+        rand = generate_random_string()
+        self.run_on_new_document(f"window.{rand} = window.fetch")
+        self.native_fetch_name = rand
 
     def run_js(self, script: str, args: Optional[any]=None) -> Any:
         # Run it in IIFE for isloation
@@ -758,17 +847,106 @@ class DriverBase:
     ) -> None:
         self.run_cdp_command(cdp.page.enable())
         return self.run_cdp_command(cdp.page.add_script_to_evaluate_on_new_document(script))
-        
+
     def run_cdp_command(self, command) -> Any:
         return self._run(self._tab.run_cdp_command(command))
-    
-    def prevent_fetch_spying(self) -> Any:
-        rand = generate_random_string()
-        self.run_on_new_document(f"window.{rand} = window.fetch")
-        self.native_fetch_name = rand
 
-    def open_in_devtools(self) -> None:
-        self._tab.open_external_inspector()
+
+    def before_request_sent(self, handler: Callable[[str, cdp.network.Request, cdp.network.RequestWillBeSent], None]):
+        """
+        Registers a handler to be called when a request is about to be sent.
+
+        Args:
+            handler (Callable[[str, cdp.network.Request, cdp.network.RequestWillBeSent], None]):
+                A callback function that will be called before each request is sent.
+                The callback receives three arguments:
+                    - request_id (str): The unique identifier for the request.
+                    - request (cdp.network.Request): The request object containing details like URL, method, headers.
+                    - request_will_be_sent (cdp.network.RequestWillBeSent): Additional request metadata.
+
+        Example:
+            ```python
+            def before_request_handler(request_id, request, request_will_be_sent):
+                print(
+                    "before_request_handler",
+                    {
+                        "request_id": request_id,
+                        "url": request.url,
+                        "method": request.method,
+                        "headers": request.headers,
+                    },
+                )
+                driver.responses.append(request_id)
+
+            driver.before_request_sent(before_request_handler)
+            driver.get("https://example.com/")
+            collected_responses = driver.responses.collect()
+            ```
+        """
+        self._tab._run(self._tab.before_request_sent(handler))
+
+    def after_response_received(self, handler: Callable[[str, cdp.network.Response, cdp.network.ResponseReceived], None]):
+        """
+        Registers a handler to be called when a response is received.
+
+        Args:
+            handler (Callable[[str, cdp.network.Response, cdp.network.ResponseReceived], None]):
+                A callback function that will be called after each response is received.
+                The callback receives three arguments:
+                    - request_id (str): The ID of the request.
+                    - response (cdp.network.Response): The response object.
+                    - event (cdp.network.ResponseReceived): The event object.
+
+        Example:
+            ```python
+            def after_response_handler(
+                request_id: str,
+                response: cdp.network.Response,
+                event: cdp.network.ResponseReceived,
+            ):
+                url = response.url
+                status = response.status
+                headers = response.headers
+                print(
+                    "after_response_handler",
+                    {
+                        "request_id": request_id,
+                        "url": url,
+                        "status": status,
+                        "headers": headers,
+                    },
+                )
+                driver.responses.append(request_id)
+
+            driver.after_response_received(after_response_handler)
+            driver.get("https://example.com/")
+            collected_responses = driver.responses.collect()
+            ```
+        """
+        self._tab._run(self._tab.after_response_received(handler))
+        
+    def collect_response(self, request):
+        try:
+            body,base64Encoded = self.run_cdp_command(cdp.network.get_response_body(request))
+            response = Response(
+                    request_id=request,
+                    content=body,
+                    is_base_64=base64Encoded,
+                )
+                
+        except ChromeException as e:
+          if "No data found for resource" in e.message:
+            response = Response(
+                    request_id=request,
+                    content=None,
+                    is_base_64=False,
+                )
+            
+        return response
+    
+    def collect_responses(self, request_ids):
+        return [self.collect_response(request_id) for request_id in request_ids]    
+
 
     def get_js_variable(self, variable_name: str) -> Any:
         return self._run(self._tab.js_dumps(variable_name))
@@ -918,6 +1096,63 @@ class DriverBase:
             raise InputElementForLabelNotFoundException(label)
 
 
+    def clear(self, selector: str, wait: Optional[int] = Wait.SHORT) -> None:
+        """
+        Clears the text from the input element specified by the selector.
+        Args:
+            selector (str): The CSS selector of the element to clear.
+            wait (Optional[int], optional): The maximum time to wait for the element to be present. Defaults to Wait.SHORT.
+        Returns:
+            None
+        """
+        el = self.wait_for_element(selector, wait)
+        el.clear()
+        
+    def focus(self, selector: str, wait: Optional[int] = Wait.SHORT) -> None:
+        """
+        Focuses on the element specified by the selector.
+
+        Args:
+            selector (str): The CSS selector of the element to focus on.
+            wait (Optional[int], optional): The time to wait for the element to be available. Defaults to Wait.SHORT.
+
+        Returns:
+            None
+        """
+        el = self.wait_for_element(selector, wait)
+        el.focus()
+
+
+    def set_value(self, selector: str, value: str, wait: Optional[int] = Wait.SHORT) -> None:
+        """
+        Sets the value of the element specified by the selector.
+
+        Args:
+            selector (str): The CSS selector of the element.
+            value (str): The value to set for the element.
+            wait (Optional[int], optional): The time to wait for the element to be available. Defaults to Wait.SHORT.
+
+        Returns:
+            None
+        """
+        el = self.wait_for_element(selector, wait)
+        el.set_value(value)
+
+    def set_text(self, selector: str, text: str, wait: Optional[int] = Wait.SHORT) -> None:
+        """
+        Sets the text content of the element specified by the selector.
+
+        Args:
+            selector (str): The CSS selector of the element.
+            text (str): The text to set for the element.
+            wait (Optional[int], optional): The time to wait for the element to be available. Defaults to Wait.SHORT.
+
+        Returns:
+            None
+        """
+        el = self.wait_for_element(selector, wait)
+        el.set_text(text)
+        
 
     def check_element(self, selector: str, wait: Optional[int] = Wait.SHORT) -> None:
         elem = self.wait_for_element(selector, wait)
@@ -953,6 +1188,39 @@ class DriverBase:
             input_elem.uncheck_element()
         else:
             raise CheckboxElementForLabelNotFoundException(label)
+
+    def select_option(
+        self,
+        selector: str,
+        value: Optional[Union[str, List[str]]] = None,
+        index: Optional[Union[int, List[int]]] = None,
+        label: Optional[Union[str, List[str]]] = None,
+        wait: Optional[int] = Wait.SHORT,
+    ) -> None:
+        """
+        Selects an option from a dropdown element specified by the selector.
+
+        Args:
+            selector (str): The CSS selector for the dropdown element.
+            value (Optional[Union[str, List[str]]], optional): The value(s) of the option(s) to select. Defaults to None.
+            index (Optional[Union[int, List[int]]], optional): The index/indices of the option(s) to select. Defaults to None.
+            label (Optional[Union[str, List[str]]], optional): The label(s) of the option(s) to select. Defaults to None.
+            wait (Optional[int], optional): The time to wait for the element to be available. Defaults to Wait.SHORT.
+
+        Raises:
+            ValueError: If none of 'value', 'index', or 'label' is provided.
+
+        Returns:
+            None
+
+        Example:
+            driver.get("https://www.digitaldutch.com/unitconverter/length.htm")
+            driver.select_option("select#selectFrom", index=17)
+            driver.prompt()
+        """
+        select_element = self.wait_for_element(selector, wait)
+        perform_select_options(select_element, value, index, label, )
+
 
     def get_link(
         self,
@@ -1041,6 +1309,20 @@ class DriverBase:
             self, self._tab, self._run(self._tab.wait_for(selector, timeout=wait))
         )
 
+    def remove(self, selector: str, wait: Optional[int] = Wait.SHORT) -> None:
+        """
+        Removes the element specified by the selector from the DOM.
+
+        Args:
+            selector (str): The CSS selector of the element to remove.
+            wait (Optional[int], optional): The time to wait for the element to be available. Defaults to Wait.SHORT.
+
+        Returns:
+            None
+        """
+        el = self.wait_for_element(selector, wait)
+        el.remove()    
+
     def get_attribute(
         self, selector: str, attribute: str, wait: Optional[int] = Wait.SHORT
     ) -> str:
@@ -1052,6 +1334,20 @@ class DriverBase:
     ) -> dict:
         el = self.wait_for_element(selector, wait)
         return el.attributes
+
+    # def get_js_properties(self, selector: str, wait: Optional[int] = Wait.SHORT) -> dict:
+    #     """
+    #     Retrieves the JavaScript properties of the element specified by the selector.
+
+    #     Args:
+    #         selector (str): The CSS selector of the element.
+    #         wait (Optional[int], optional): The time to wait for the element to be available. Defaults to Wait.SHORT.
+
+    #     Returns:
+    #         dict: A dictionary containing the JavaScript properties of the element.
+    #     """
+    #     el = self.wait_for_element(selector, wait)
+    #     return el.get_js_properties()
 
     def scroll_to_bottom(
         self,
@@ -1119,17 +1415,6 @@ class DriverBase:
         el = self.wait_for_element(selector, wait)
         el.upload_multiple_files(file_paths)
 
-    def sleep(self, n: int) -> None:
-        sleep_for_n_seconds(n)
-
-    def short_random_sleep(self) -> None:
-        sleep_for_n_seconds(uniform(2, 4))
-
-    def long_random_sleep(self) -> None:
-        sleep_for_n_seconds(uniform(6, 9))
-
-    def sleep_forever(self) -> None:
-        sleep_forever()
 
     def get_bot_detected_by(self) -> str:
         # or script[data-cf-beacon]
@@ -1309,13 +1594,47 @@ class DriverBase:
         return self._tab.__repr__()
 
 
-class IframeElement(DriverBase):
+
+# class IframeTabBase(BrowserTab):
+    # - 
+    # 
+# class IframeElementBase(BrowserTab):
+# overrides BrowserTab appropeiately. 
+    # - saying method is not supported, 
+    # or print getting from main tab, not iframe, due to different origin
+    # givess appropeouiatelt
+
+
+class IframeTab(BrowserTab):
 
     @property
     def iframe_url(self) -> Tab:
         return self._tab_value.target.url
 
-class Driver(DriverBase):
+
+class IframeElement(BrowserTab):
+    def __init__(self, elem: Element, config, _tab_value:Tab, _browser:Browser):
+        self.elem  = elem
+        super().__init__(config, _tab_value, _tab_value)
+
+
+    @property
+    def current_url(self):
+        return self.elem._elem.content_document.document_url
+
+    @property
+    def iframe_url(self) -> Tab:
+        return self.current_url
+
+    def select(self, selector: str, wait: Optional[int] = Wait.SHORT) -> Element:
+        return self.elem.select(selector, wait)
+        
+
+    # @property
+    # def iframe_url(self) -> Tab:
+    #     return self._tab_value.target.url
+
+class Driver(BrowserTab):
     def __init__(
         self,
         headless=False,
@@ -1358,50 +1677,169 @@ class Driver(DriverBase):
 
         self._browser: Browser = self._run(start(self.config))
 
-        block_if_should(self)
-
         if self.config.tiny_profile:
             load_cookies(self, self.config.profile)
 
         super().__init__(self.config, self._tab_value, self._browser)
 
+
+    @property
+    def user_agent(self):
+        global _user_agent
+        if not _user_agent:
+            _user_agent = self.run_js("return navigator.userAgent")
+        return _user_agent
+
+
+
+    @property
+    def profile(self):
+        from .profile import Profile
+
+        if not self.config.profile:
+            raise NoProfileException()
+        return Profile(self.config.profile)
+
+    @profile.setter
+    def profile(self, value):
+        from .profile import Profiles
+
+        if not self.config.profile:
+            raise NoProfileException()
+
+        if value is None:
+            Profiles.delete_profile(self.config.profile)
+        elif isinstance(value, dict):
+            Profiles.set_profile(self.config.profile, value)
+        else:
+            raise InvalidProfileException()
+        
+
+    def get(self, link: str, bypass_cloudflare=False, wait: Optional[int] = None, timeout=30) -> Tab:
+        self._tab = self._run(self._browser.get(link))
+        self.sleep(wait)
+        wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load, timeout=timeout)
+        if bypass_cloudflare:
+            self.detect_and_bypass_cloudflare()
+        return self._tab
+
+    def open_link_in_new_tab(self, link: str, bypass_cloudflare=False, wait: Optional[int] = None, timeout=30) -> Tab:
+        self._tab = self._run(self._browser.get(link, new_tab=True))
+        self.sleep(wait)
+        wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load, timeout=timeout)
+        if bypass_cloudflare:
+            self.detect_and_bypass_cloudflare()
+        return self._tab
+    
+
+    def get_via(
+        self,
+        link: str,
+        referer: str,
+        bypass_cloudflare=False,
+        wait: Optional[int] = None,
+        timeout=30,
+    ) -> Tab:
+        referer = referer.rstrip("/") + "/"
+        self._tab = self._run(self._browser.get(link, referrer=referer))
+        self.sleep(wait)
+        wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load, timeout=timeout)
+
+        if bypass_cloudflare:
+            self.detect_and_bypass_cloudflare()
+        return self._tab
+
+    def google_get(
+        self,
+        link: str,
+        bypass_cloudflare=False,
+        wait: Optional[int] = None,
+        accept_google_cookies: bool = False,
+        timeout=30,
+    ) -> Tab:
+        if accept_google_cookies:
+            # No need to accept cookies multiple times
+            if (
+                hasattr(self, "has_accepted_google_cookies")
+                and self.has_accepted_google_cookies
+            ):
+                pass
+            else:
+                self.get("https://www.google.com/")
+                if '/sorry/' in self.current_url:
+                    print('Blocked by Google')
+                else:
+                    perform_accept_google_cookies_action(self)
+                    self.has_accepted_google_cookies = True
+        self.get_via(
+            link,
+            "https://www.google.com/",
+            bypass_cloudflare=bypass_cloudflare,
+            wait=wait,
+            timeout=timeout,
+        )
+        return self._tab
+
+    def get_via_this_page(
+        self, link: str, bypass_cloudflare=False, wait: Optional[int] = None, timeout=30
+    ) -> Tab:
+        currenturl = self.current_url
+        self.run_js(f'window.location.href = "{link}";')
+        if currenturl != link:
+            while True:
+                if currenturl != self.current_url:
+                    break
+                sleep(0.1)
+        self.sleep(wait)
+
+        wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load, timeout=timeout)
+
+        if bypass_cloudflare:
+            self.detect_and_bypass_cloudflare()
+
+        return self._tab
+
+    def reload(self) -> Tab:
+        self._run(self._tab.reload())
+        wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load)
+        return self._tab
+            
+    def switch_to_tab(
+        self, tab: Tab
+    ) -> Tab:
+        self._tab = tab
+
+    def open_in_devtools(self) -> None:
+        self._tab.open_external_inspector()
+
+
+    def sleep(self, n: int) -> None:
+        sleep_for_n_seconds(n)
+
+    def short_random_sleep(self) -> None:
+        sleep_for_n_seconds(uniform(2, 4))
+
+    def long_random_sleep(self) -> None:
+        sleep_for_n_seconds(uniform(6, 9))
+
+    def sleep_forever(self) -> None:
+        sleep_forever()
+
     def block_urls(self, urls) -> None:
-        # You usually don't need to close it because we automatically close it when script is cancelled (ctrl + c) or completed
-        self.run_cdp_command(enable_network())
-        self.run_cdp_command(block_urls(urls))
+        self._tab.block_urls()
 
     def block_images_and_css(self) -> None:
-        self.block_urls(
-            [
-                ".css",
-                ".jpg",
-                ".jpeg",
-                ".png",
-                ".webp",
-                ".svg",
-                ".gif",
-                ".woff",
-                ".pdf",
-                ".zip",
-                ".ico",
-            ]
-        )
+        self._tab.block_images_and_css()
 
     def block_images(self) -> None:
-        self.block_urls(
-            [
-                ".jpg",
-                ".jpeg",
-                ".png",
-                ".webp",
-                ".svg",
-                ".gif",
-                ".woff",
-                ".pdf",
-                ".zip",
-                ".ico",
-            ]
-        )
+        self._tab.block_images()
+
+    def grant_all_permissions(self):
+        self._browser.grant_all_permissions()
+
+    def allow_insecure_connections(self) -> None:
+        self._tab._run(self._tab.bypass_insecure_connection_warning())
+
 
     def close(self) -> None:
         if self.config.tiny_profile:

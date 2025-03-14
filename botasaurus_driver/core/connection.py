@@ -16,7 +16,8 @@ from typing import (
 import websocket
 from queue import Queue, Empty
 from ..exceptions import ChromeException
-
+import types
+import inspect
 
 from . import util
 from .. import cdp
@@ -113,7 +114,48 @@ class Connection:
         if not self.websocket:
             return True
         return False
+    def add_handler(
+        self,
+        event_type_or_domain,
+        handler,
+    ):
+        """
+        add a handler for given event
 
+        if event_type_or_domain is a module instead of a type, it will find all available events and add
+        the handler.
+
+        if you want to receive event updates (network traffic are also 'events') you can add handlers for those events.
+        handlers can be regular callback functions or coroutine functions (and also just lamba's).
+        for example, you want to check the network traffic:
+
+        .. code-block::
+
+            page.add_handler(cdp.network.RequestWillBeSent, lambda event: print('network event => %s' % event.request))
+
+        the next time you make network traffic you will see your console print like crazy.
+
+        :param event_type_or_domain:
+        :type event_type_or_domain:
+        :param handler:
+        :type handler:
+
+        :return:
+        :rtype:
+        """
+        if isinstance(event_type_or_domain, types.ModuleType):
+            for name, obj in inspect.getmembers_static(event_type_or_domain):
+                if name.isupper():
+                    continue
+                if not name[0].isupper():
+                    continue
+                if type(obj) != type:
+                    continue
+                if inspect.isbuiltin(obj):
+                    continue
+                self.handlers[obj].append(handler)
+            return
+        self.handlers[event_type_or_domain].append(handler)
     def open(self, **kw):
         """
         opens the websocket connection. should not be called manually by users
@@ -158,25 +200,24 @@ class Connection:
         if self.listener:
                 self.listener.cancel_event.set()
                 self.enabled_domains.clear()
-                self.listener = None
+                # self.listener = None
             
         self.close_socket_if_possible()
 
     def close_socket_if_possible(self):
         if self.websocket:
             self.websocket.close()
-            self.websocket = None
+            # self.websocket = None
         
 
     def sleep(self, t: Union[int, float] = 0.25):
         self.update_target()
         time.sleep(t)
 
-    def wait_to_be_idle(self, t: Union[int, float] = None):
+    def wait(self, t: Union[int, float] = None):
         """
-        waits until the event listener
-        reports idle (which is when no new events had been received in .5 seconds
-        or, 1 second when in interactive mode)
+        waits until the event listener reports idle (no new events received in certain timespan).
+        when `t` is provided, ensures waiting for `t` seconds, no matter what.
 
         :param t:
         :type t:
@@ -195,15 +236,13 @@ class Connection:
         except AttributeError:
             # no listener created yet
             pass
-        if t is not None:
-            self.sleep(t)
 
-    # def __getattr__(self, item):
-    #     """:meta private:"""
-    #     try:
-    #         return getattr(self.target, item)
-    #     except AttributeError:
-    #         raise
+    def __getattr__(self, item):
+        """:meta private:"""
+        try:
+            return getattr(self.target, item)
+        except AttributeError:
+            raise
 
     def __enter__(self):
         """:meta private:"""
@@ -238,6 +277,10 @@ class Connection:
         self.open()
         if not self.websocket or self.closed:
             return
+        
+        return self.perform_send(cdp_obj, _is_update)
+
+    def perform_send(self, cdp_obj, _is_update=False):
         if not self.listener or not self.listener.running:
             self.listener = Listener(self, self.reconnect_websocket)
         
@@ -259,7 +302,6 @@ class Connection:
         result = parse_response(result, cdp_obj)
 
         return result
-
     def _register_handlers(self):
         """
         ensure that for current (event) handlers, the corresponding
@@ -267,14 +309,12 @@ class Connection:
 
         """
         seen = []
-
         # save a copy of current enabled domains in a variable
         # domains will be removed from this variable
         # if it is still needed according to the set handlers
         # so at the end this variable will hold the domains that
         # are not represented by handlers, and can be removed
         enabled_domains = self.enabled_domains.copy()
-
         for event_type in self.handlers.copy():
             domain_mod = None
             if len(self.handlers[event_type]) == 0:
@@ -304,13 +344,13 @@ class Connection:
                         self.enabled_domains.remove(domain_mod)
                     except:  # noqa
                         continue
+                finally:
+                    continue
         for ed in enabled_domains:
             # we started with a copy of self.enabled_domains and removed a domain from this
             # temp variable when we registered it or saw handlers for it.
             # items still present at this point are unused and need removal
-
             self.enabled_domains.remove(ed)
-
 
 class Listener:
     def __init__(self, connection: Connection, reconnect_ws):
@@ -358,14 +398,13 @@ class Listener:
         if not self.task.is_alive():
             return False
         return True
+    def set_idle(self):
+        self.idle.set()
 
-    def listener_loop(self):
-        while not self.cancel_event.is_set():
-            while not self.connection.websocket:
-                self.reconnect_ws()
+    def clear_idle(self):
+        self.idle.clear()
 
-            ws = self.connection.websocket
-            def on_message(ws, message):
+    def handle_message(self, message):
                 message = json.loads(message)
                 if "id" in message:
                     # pass
@@ -394,15 +433,30 @@ class Listener:
                     except:
                         return
                     return
+
+    def listener_loop(self):
+
+        while not self.cancel_event.is_set():
+            while not self.connection.websocket:
+                self.reconnect_ws()
+
+            ws = self.connection.websocket
+            def on_message(ws, message):
+                self.clear_idle()
+                self.handle_message(message)
+                self.set_idle()
                 
             def on_error(ws, error):
+                self.set_idle()
                 # print(f"Error: {error}")
                 pass
 
             def on_close(ws, x, w):
+                self.set_idle()
                 # print("Connection closed")
                 pass
             def on_open(ws):
+                self.set_idle()
                 self.connected_event.set()
 
             ws.on_message = on_message

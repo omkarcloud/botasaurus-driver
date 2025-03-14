@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 import time
+import traceback
 import typing
 from datetime import datetime
 from typing import List, Union, Optional
@@ -13,6 +14,7 @@ from . import util
 from .config import PathLike
 from .connection import Connection
 from .. import cdp
+from .custom_storage_cdp import block_urls, enable_network
 
 
 bannedtextsearchresults = set(["title","meta", "script", "link", "style", "head"])
@@ -34,7 +36,8 @@ def make_core_string(SCRIPT,args ):
                 expression = expression.replace("ARGS",  json.dumps(args).replace(r'\"', r'\\"'))
             else:
                 expression = expression.replace("const args = JSON.parse('ARGS'); ", "")
-            return expression                
+            return expression             
+
 class Tab(Connection):
     """
     :ref:`tab` is the controlling mechanism/connection to a 'target',
@@ -143,15 +146,173 @@ class Tab(Connection):
         browser= None,
         **kwargs,
     ):
-        super().__init__(websocket_url, target, **kwargs)
+        super().__init__(websocket_url, target, browser, **kwargs)
         self.browser = browser
+
+        self.add_handler(
+            cdp.runtime.ExecutionContextCreated, self._execution_contexts_handler
+        )
+        self.add_handler(
+            cdp.runtime.ExecutionContextDestroyed, self._execution_contexts_handler
+        )
+        self.add_handler(
+            cdp.runtime.ExecutionContextsCleared, self._execution_contexts_handler
+        )
+
+        self.add_handler(cdp.page.FrameAttached, self._frame_handler)
+        self.add_handler(cdp.page.FrameDetached, self._frame_handler)
+        self.add_handler(cdp.page.FrameStartedLoading, self._frame_handler)
+        self.add_handler(cdp.page.FrameStoppedLoading, self._frame_handler)
+
+        self.execution_contexts: typing.Dict[str, ExecutionContext] = {}
+        # self.execution_contexts: List[ExecutionContext] = []
+        self.frames: typing.Dict[str, Frame] = {}
         self._dom = None
         self._window_id = None
-        self.is_closed = False
-
-
     def _run(self, coro):
         return coro
+    @property
+    def frames_list(self) -> List[Frame]:
+        return list(self.frames.values())
+
+    @property
+    def execution_contexts_list(self) -> List[ExecutionContext]:
+        return list(self.execution_contexts.values())
+
+
+    def before_request_sent(self, handler):
+        """
+        Registers a handler to be called when a request is sent.
+
+        Args:
+            handler (Callable): A lambda function to handle the request event.
+        """
+        def handle(event: cdp.network.RequestWillBeSent):
+            try:
+              handler(event.request_id, event.request, event)
+            except:
+              traceback.print_exc()
+              raise
+
+        self.add_handler(cdp.network.RequestWillBeSent, handle)
+
+    def after_response_received(self, handler):
+        """
+        Registers a handler to be called when a response is received.
+
+        Args:
+            handler (Callable): A lambda function to handle the response event.
+        """
+        def handle(event: cdp.network.ResponseReceived):
+            try:
+              handler(event.request_id, event.response, event)
+            except:
+              traceback.print_exc()
+              raise
+
+        self.add_handler(cdp.network.ResponseReceived, handle)
+
+    def _execution_contexts_handler(
+        self,
+        event: Union[
+            cdp.runtime.ExecutionContextsCleared,
+            cdp.runtime.ExecutionContextCreated,
+            cdp.runtime.ExecutionContextDestroyed,
+        ],
+        *args,
+        **kwargs,
+    ):
+
+        if type(event) is cdp.runtime.ExecutionContextCreated:
+            context = event.context
+            frame_id = context.aux_data.get("frameId")
+
+            try:
+                if context.id_ in self.execution_contexts:
+                    self.execution_contexts.__dict__.update(**vars(context))
+                else:
+                    execution_context = ExecutionContext(tab=self, **vars(context))
+                    self.execution_contexts[context.unique_id] = execution_context
+
+                frame: Frame = next(filter(lambda key: key == frame_id, self.frames))
+                if frame and context.unique_id in self.execution_contexts:
+                    self.frames[str(frame_id)].execution_contexts[context.unique_id] = (
+                        self.execution_contexts[context.unique_id]
+                    )
+
+            except StopIteration:
+                frame: None = None
+                return
+
+        elif type(event) is cdp.runtime.ExecutionContextDestroyed:
+            unique_id = event.execution_context_unique_id
+            for frame_id in self.frames.keys():
+                try:
+                    self.frames[str(frame_id)].execution_contexts.pop(unique_id)
+                except KeyError:
+                    pass
+
+        elif type(event) is cdp.runtime.ExecutionContextsCleared:
+            self.frames.clear()
+
+    def _frame_handler(
+        self,
+        event: Union[
+            cdp.page.FrameAttached,
+            cdp.page.FrameDetached,
+            cdp.page.FrameStartedLoading,
+            cdp.page.FrameStoppedLoading,
+        ],
+        tab: Tab = None,
+    ):
+        """
+
+        :param event:
+        :type event:
+        :return:
+        :rtype:
+        """
+        ev_typ = type(event)
+        ev = event
+
+        if ev_typ is cdp.page.FrameAttached:
+            try:
+                frame = next(filter(lambda fid: ev.frame_id == fid, self.frames))
+            except:
+                frame = Frame(id_=ev.frame_id, parent_id=ev.parent_frame_id)
+                self.frames[str(ev.frame_id)] = frame
+
+            for exid in self.execution_contexts:
+                if exid not in frame.execution_contexts:
+                    frame.execution_contexts[exid] = self.execution_contexts[exid]
+                    frame.loading = True
+
+        if ev_typ is cdp.page.FrameDetached:
+            try:
+                # frame = next(filter(lambda fid: fid  ==  ev.frame_id, self.frames))
+                self.frames.pop(ev.frame_id)
+            except (KeyError,):
+                pass
+            return
+
+        if ev_typ is cdp.page.FrameStartedLoading:
+            try:
+                frame: Frame = self.frames[ev.frame_id]
+                if frame:
+                    frame.loading = True
+
+            except (StopIteration, KeyError):
+                frame = Frame(id_=ev.frame_id)
+                frame.loading = True
+                self.frames[str(frame.id_)] = frame
+
+        if ev_typ is cdp.page.FrameStoppedLoading:
+            try:
+                frame = self.frames[str(ev.frame_id)]
+                frame.loading = False
+            except (StopIteration, KeyError):
+                pass
+                # frame.loading = False
 
     @property
     def inspector_url(self):
@@ -338,13 +499,13 @@ class Tab(Connection):
                     return []
                 self.sleep(0.5)
         return results
-
     def select_all(
         self,
         selector: str,
         timeout: Union[int, float] = 10,
         node_name = None,
         _node: Optional[Union[cdp.dom.Node, element.Element]] = None,
+        include_frames=False
         
     ):
         """
@@ -359,6 +520,12 @@ class Tab(Connection):
 
         now = time.time()
         results = self.query_selector_all(selector, _node)
+        if include_frames:
+            frames = self.query_selector_all("iframe")
+            # unfortunately, asyncio.gather here is not an option
+            for fr in frames:
+                results.extend(fr.query_selector_all(selector))
+
         if timeout:
             while not results:
                 results = self.query_selector_all(selector, _node)
@@ -410,6 +577,7 @@ class Tab(Connection):
         equivalent of javascripts document.querySelectorAll.
         this is considered one of the main methods to use in this package.
 
+        it returns all matching :py:obj:`nodriver.Element` objects.
 
         :param selector: css selector. (first time? => https://www.w3schools.com/cssref/css_selectors.php )
         :type selector: str
@@ -431,7 +599,9 @@ class Tab(Connection):
             node_ids = self.send(
                 cdp.dom.query_selector_all(doc.node_id, selector)
             )
-            
+        except AttributeError:
+            # has no content_document
+            return
 
         except ChromeException as e:
             is_no_node = "could not find node" in e.message.lower()
@@ -540,6 +710,7 @@ class Tab(Connection):
         :return:
         :rtype:
         """
+        selector = selector.strip()
 
         if not _node:
             doc: cdp.dom.Node = self.send(cdp.dom.get_document(-1, True))
@@ -552,14 +723,13 @@ class Tab(Connection):
             raise DriverException("Failed to find Document")
         try:
             node_id = self.send(cdp.dom.query_selector(doc.node_id, selector))
-
         except ChromeException as e:
             is_no_node = "could not find node" in e.message.lower()
             if _node is not None:
                 if is_no_node:
                     if getattr(_node, "__last", None):
                         del _node.__last
-                        return None
+                        return []
                     # if supplied node is not found, the dom has changed since acquiring the element
                     # therefore we need to update our passed node and try again
                     _node.update()
@@ -571,7 +741,7 @@ class Tab(Connection):
                 self.send(cdp.dom.disable())
                 if is_no_node:
                     # simply means that doc was destroyed in navigation
-                    return None
+                    return []
                 raise
         if not node_id:
             return
@@ -655,6 +825,39 @@ class Tab(Connection):
     def run_cdp_command(self, command):
         return self.send(command)
 
+    def back(self):
+        """
+        history back
+        """
+        self.send(cdp.runtime.evaluate("window.history.back()"))
+
+    def forward(self):
+        """
+        history forward
+        """
+        self.send(cdp.runtime.evaluate("window.history.forward()"))
+
+    def reload(
+        self,
+        ignore_cache: Optional[bool] = True,
+        script_to_evaluate_on_load: Optional[str] = None,
+    ):
+        """
+        Reloads the page
+
+        :param ignore_cache: when set to True (default), it ignores cache, and re-downloads the items
+        :type ignore_cache:
+        :param script_to_evaluate_on_load: script to run on load. I actually haven't experimented with this one, so no guarantees.
+        :type script_to_evaluate_on_load:
+        :return:
+        :rtype:
+        """
+        self.send(
+            cdp.page.reload(
+                ignore_cache=ignore_cache,
+                script_to_evaluate_on_load=script_to_evaluate_on_load,
+            ),
+        )
     def find_element_by_text(
         self,
         text: str,
@@ -990,6 +1193,16 @@ if (resp instanceof Promise) {
 
             self.close_connections()
             
+    def get_window(self):
+        """
+        get the window Bounds
+        :return:
+        :rtype:
+        """
+        window_id, bounds = self.send(
+            cdp.browser.get_window_for_target(self.target_id)
+        )
+        return window_id, bounds
     def get_content(self):
         """
         gets the current page source content (html)
@@ -1000,6 +1213,178 @@ if (resp instanceof Promise) {
         return self.send(
             cdp.dom.get_outer_html(backend_node_id=doc.backend_node_id)
         )
+
+    def maximize(self):
+        """
+        maximize page/tab/window
+        """
+        return self.set_window_state(state="maximize")
+
+    def minimize(self):
+        """
+        minimize page/tab/window
+        """
+        return self.set_window_state(state="minimize")
+
+    def fullscreen(self):
+        """
+        minimize page/tab/window
+        """
+        return self.set_window_state(state="fullscreen")
+
+    def normal(self):
+        return self.set_window_state(state="normal")
+
+    def set_window_size(self, left=0, top=0, width=1280, height=1024):
+        """
+        set window size and position
+
+        :param left: pixels from the left of the screen to the window top-left corner
+        :type left:
+        :param top: pixels from the top of the screen to the window top-left corner
+        :type top:
+        :param width: width of the window in pixels
+        :type width:
+        :param height: height of the window in pixels
+        :type height:
+        :return:
+        :rtype:
+        """
+        return self.set_window_state(left, top, width, height)
+
+    def activate(self):
+        """
+        active this target (ie: tab,window,page)
+        """
+        self.send(cdp.target.activate_target(self.target.target_id))
+
+    def bring_to_front(self):
+        """
+        alias to self.activate
+        """
+        self.activate()
+
+    def set_window_state(
+        self, left=0, top=0, width=1280, height=720, state="normal"
+    ):
+        """
+        sets the window size or state.
+
+        for state you can provide the full name like minimized, maximized, normal, fullscreen, or
+        something which leads to either of those, like min, mini, mi,  max, ma, maxi, full, fu, no, nor
+        in case state is set other than "normal", the left, top, width, and height are ignored.
+
+        :param left:
+            desired offset from left, in pixels
+        :type left: int
+
+        :param top:
+            desired offset from the top, in pixels
+        :type top: int
+
+        :param width:
+            desired width in pixels
+        :type width: int
+
+        :param height:
+            desired height in pixels
+        :type height: int
+
+        :param state:
+            can be one of the following strings:
+                - normal
+                - fullscreen
+                - maximized
+                - minimized
+
+        :type state: str
+
+        """
+        available_states = ["minimized", "maximized", "fullscreen", "normal"]
+        window_id: cdp.browser.WindowID
+        bounds: cdp.browser.Bounds
+        (window_id, bounds) = self.get_window()
+
+        for state_name in available_states:
+            if all(x in state_name for x in state.lower()):
+                break
+        else:
+            raise NameError(
+                "could not determine any of %s from input '%s'"
+                % (",".join(available_states), state)
+            )
+        window_state = getattr(
+            cdp.browser.WindowState, state_name.upper(), cdp.browser.WindowState.NORMAL
+        )
+        if window_state == cdp.browser.WindowState.NORMAL:
+            bounds = cdp.browser.Bounds(left, top, width, height, window_state)
+        else:
+            # min, max, full can only be used when current state == NORMAL
+            # therefore we first switch to NORMAL
+            self.set_window_state(state="normal")
+            bounds = cdp.browser.Bounds(window_state=window_state)
+
+        self.send(cdp.browser.set_window_bounds(window_id, bounds=bounds))
+
+    def scroll_down(self, amount=25):
+        """
+        scrolls down maybe
+
+        :param amount: number in percentage. 25 is a quarter of page, 50 half, and 1000 is 10x the page
+        :type amount: int
+        :return:
+        :rtype:
+        """
+        window_id: cdp.browser.WindowID
+        bounds: cdp.browser.Bounds
+        (window_id, bounds) = self.get_window()
+
+        self.send(
+            cdp.input_.synthesize_scroll_gesture(
+                x=0,
+                y=0,
+                y_distance=-(bounds.height * (amount / 100)),
+                y_overscroll=0,
+                x_overscroll=0,
+                prevent_fling=True,
+                repeat_delay_ms=0,
+                speed=7777,
+            )
+        )
+
+    def scroll_up(self, amount=25):
+        """
+        scrolls up maybe
+
+        :param amount: number in percentage. 25 is a quarter of page, 50 half, and 1000 is 10x the page
+        :type amount: int
+
+        :return:
+        :rtype:
+        """
+        window_id: cdp.browser.WindowID
+        bounds: cdp.browser.Bounds
+        (window_id, bounds) = self.get_window()
+
+        self.send(
+            cdp.input_.synthesize_scroll_gesture(
+                x=0,
+                y=0,
+                y_distance=(bounds.height * (amount / 100)),
+                x_overscroll=0,
+                prevent_fling=True,
+                repeat_delay_ms=0,
+                speed=7777,
+            )
+        )
+
+    def wait(self, t: Union[int, float] = None):
+        tree = self.get_frame_tree()
+        tree_map = {str(f.id_): f for f in util.flatten_frame_tree(tree)}
+        for frame_id in tree_map:
+            if frame_id in self.frames:
+                self.frames[frame_id].__dict__.update(tree_map[frame_id].__dict__)
+        super().wait(t)
 
     def wait_for(
         self,
@@ -1036,8 +1421,14 @@ if (resp instanceof Promise) {
                 self.sleep(0.5)
                 # self.sleep(0.5)
             return item
-
-
+        if text:
+            item = self.find_element_by_text(text)
+            while not item:
+                item = self.find_element_by_text(text)
+                if time.time() - now > timeout:
+                    raise ElementWithSelectorNotFoundException(text)
+                self.sleep(0.5)
+            return item
     def download_file(self, url: str, filename: Optional[PathLike] = None):
         """
         downloads file by given url.
@@ -1156,6 +1547,44 @@ if (resp instanceof Promise) {
             )
         )
         self._download_behavior = ["allow", path]
+    def get_all_linked_sources(self):
+        """
+        get all elements of tag: link, a, img, scripts meta, video, audio
+
+        :return:
+        """
+        all_assets = self.query_selector_all(selector="a,link,img,script,meta")
+        return [element.create(asset, self) for asset in all_assets]
+
+    def get_all_urls(self, absolute=True) -> List[str]:
+        """
+        convenience function, which returns all links (a,link,img,script,meta)
+
+        :param absolute: try to build all the links in absolute form instead of "as is", often relative
+        :return: list of urls
+        """
+
+        import urllib.parse
+
+        res = []
+        all_assets = self.query_selector_all(selector="a,link,img,script,meta")
+        for asset in all_assets:
+            if not absolute:
+                res.append(asset.src or asset.href)
+            else:
+                for k, v in asset.attrs.items():
+                    if k in ("src", "href"):
+                        if "#" in v:
+                            continue
+                        if not any([_ in v for _ in ("http", "//", "/")]):
+                            continue
+                        abs_url = urllib.parse.urljoin(
+                            "/".join(self.url.rsplit("/")[:3]), v
+                        )
+                        if not abs_url.startswith(("http", "//", "ws")):
+                            continue
+                        res.append(abs_url)
+        return res
 
     def __call__(
         self,
@@ -1174,6 +1603,300 @@ if (resp instanceof Promise) {
         """
         return self.wait_for(text, selector, timeout)
 
+    def get_frame_tree(self) -> cdp.page.FrameTree:
+        """
+        retrieves the frame tree for current tab
+        There seems no real difference between :ref:`Tab.get_frame_resource_tree()`
+        :return:
+        :rtype:
+        """
+        tree: cdp.page.FrameTree = super().send(cdp.page.get_frame_tree())
+        return tree
+
+    def get_frame_resource_tree(self) -> cdp.page.FrameResourceTree:
+        """
+        retrieves the frame resource tree for current tab.
+        There seems no real difference between :ref:`Tab.get_frame_tree()`
+        but still it returns a different object
+        :return:
+        :rtype:
+        """
+        tree: cdp.page.FrameResourceTree = self.send(cdp.page.get_resource_tree())
+        return tree
+
+    def get_frame_resource_urls(self):
+        """
+        gets the
+        :param urls_only:
+        :type urls_only:
+        :return:
+        :rtype:
+        """
+        import functools
+        _tree = self.get_frame_resource_tree()
+        return functools.reduce(
+            lambda a, b: a + b[1], util.flatten_frame_tree(_tree), []
+        )
+
+    def search_frame_resources(self, query: str):
+        list_of_tuples = self.get_frame_resource_urls()
+        tasks = []
+        for frame_id, urls in list_of_tuples:
+            for url in urls:
+                tasks.append(
+                    self.send(
+                        cdp.page.search_in_resource(
+                            frame_id=cdp.page.FrameId(frame_id), url=url, query=query
+                        )
+                    )
+                )
+        return tasks
+
+    def bypass_insecure_connection_warning(self):
+        """
+        when you enter a site where the certificate is invalid
+        you get a warning. call this function to "proceed"
+        :return:
+        :rtype:
+        """
+        body = self.select("body")
+        body.send_keys("thisisunsafe")
+
+    def mouse_move(self, x: float, y: float, steps=10, flash=False):
+        self.send(cdp.input_.dispatch_mouse_event("mouseMoved", x=x, y=y))
+        # steps = 1 if (not steps or steps < 1) else steps
+        # # probably the worst waay of calculating this. but couldn't think of a better solution today.
+        # if steps > 1:
+        #     step_size_x = x // steps
+        #     step_size_y = y // steps
+        #     pathway = [(step_size_x * i, step_size_y * i) for i in range(steps + 1)]
+        #     for point in pathway:
+        #         if flash:
+        #             self.flash_point(point[0], point[1])
+        #         self.send(
+        #             cdp.input_.dispatch_mouse_event(
+        #                 "mouseMoved", x=point[0], y=point[1]
+        #             )
+        #         )
+        # else:
+        #     self.send(cdp.input_.dispatch_mouse_event("mouseMoved", x=x, y=y))
+        # if flash:
+        #     self.flash_point(x, y)
+        # else:
+        #     self.sleep(0.05)
+        # self.send(cdp.input_.dispatch_mouse_event("mouseReleased", x=x, y=y))
+        # if flash:
+        #     self.flash_point(x, y)
+
+    def mouse_click(
+        self,
+        x: float,
+        y: float,
+        button: str = "left",
+        buttons: typing.Optional[int] = 1,
+        modifiers: typing.Optional[int] = 0,
+        _until_event: typing.Optional[type] = None,
+    ):
+        """native click on position x,y
+        :param y:
+        :type y:
+        :param x:
+        :type x:
+        :param button: str (default = "left")
+        :param buttons: which button (default 1 = left)
+        :param modifiers: *(Optional)* Bit field representing pressed modifier keys.
+                Alt=1, Ctrl=2, Meta/Command=4, Shift=8 (default: 0).
+        :param _until_event: internal. event to wait for before returning
+        :return:
+        """
+
+        self.send(
+            cdp.input_.dispatch_mouse_event(
+                "mousePressed",
+                x=x,
+                y=y,
+                modifiers=modifiers,
+                button=cdp.input_.MouseButton(button),
+                buttons=buttons,
+                click_count=1,
+            )
+        )
+
+        self.send(
+            cdp.input_.dispatch_mouse_event(
+                "mouseReleased",
+                x=x,
+                y=y,
+                modifiers=modifiers,
+                button=cdp.input_.MouseButton(button),
+                buttons=buttons,
+                click_count=1,
+            )
+        )
+
+    def mouse_drag(
+        self,
+        source_point: tuple[float, float],
+        dest_point: tuple[float, float],
+        relative: bool = False,
+        steps: int = 1,
+    ):
+        """
+        drag mouse from one point to another. holding button pressed
+        you are probably looking for :py:meth:`element.Element.mouse_drag` method. where you
+        can drag on the element
+
+        :param dest_point:
+        :type dest_point:
+        :param source_point:
+        :type source_point:
+        :param relative: when True, treats point as relative. for example (-100, 200) will move left 100px and down 200px
+        :type relative:
+
+        :param steps: move in <steps> points, this could make it look more "natural" (default 1),
+               but also a lot slower.
+               for very smooth action use 50-100
+        :type steps: int
+        :return:
+        :rtype:
+        """
+        if relative:
+            dest_point = (
+                source_point[0] + dest_point[0],
+                source_point[1] + dest_point[1],
+            )
+        self.send(
+            cdp.input_.dispatch_mouse_event(
+                "mousePressed",
+                x=source_point[0],
+                y=source_point[1],
+                button=cdp.input_.MouseButton("left"),
+            )
+        )
+        steps = 1 if (not steps or steps < 1) else steps
+
+        # if steps == 1:
+        #     self.send(
+        #         cdp.input_.dispatch_mouse_event(
+        #             "mouseMoved", x=dest_point[0], y=dest_point[1]
+        #         )
+        #     )
+        # elif steps > 1:
+        #     # probably the worst waay of calculating this. but couldn't think of a better solution today.
+        #     step_size_x = (dest_point[0] - source_point[0]) / steps
+        #     step_size_y = (dest_point[1] - source_point[1]) / steps
+        #     pathway = [
+        #         (source_point[0] + step_size_x * i, source_point[1] + step_size_y * i)
+        #         for i in range(steps + 1)
+        #     ]
+        #     for point in pathway:
+        #         self.send(
+        #             cdp.input_.dispatch_mouse_event(
+        #                 "mouseMoved",
+        #                 x=point[0],
+        #                 y=point[1],
+        #             )
+        #         )
+        #         time.sleep(0)
+
+        self.send(
+            cdp.input_.dispatch_mouse_event(
+                type_="mouseReleased",
+                x=dest_point[0],
+                y=dest_point[1],
+                button=cdp.input_.MouseButton("left"),
+            )
+        )
+
+    def flash_point(self, x, y, duration=0.5, size=10):
+        import secrets
+        style = (
+            "position:absolute;z-index:99999999;padding:0;margin:0;"
+            "left:{:.1f}px; top: {:.1f}px;"
+            "opacity:1;"
+            "width:{:d}px;height:{:d}px;border-radius:50%;background:red;"
+            "animation:show-pointer-ani {:.2f}s ease 1;"
+        ).format(x - 8, y - 8, size, size, duration)
+        script = (
+            """
+                var css = document.styleSheets[0];
+                for( let css of [...document.styleSheets]) {{
+                    try {{
+                        css.insertRule(`
+                        @keyframes show-pointer-ani {{
+                              0% {{ opacity: 1; transform: scale(1, 1);}}
+                              50% {{ transform: scale(3, 3);}}
+                              100% {{ transform: scale(1, 1); opacity: 0;}}
+                        }}`,css.cssRules.length);
+                        break;
+                    }} catch (e) {{
+                        console.log(e)
+                    }}
+                }};
+                var _d = document.createElement('div');
+                _d.style = `{0:s}`;
+                _d.id = `{1:s}`;
+                document.body.insertAdjacentElement('afterBegin', _d);
+    
+                setTimeout( () => document.getElementById('{1:s}').remove(), {2:d});
+    
+            """.format(
+                style, secrets.token_hex(8), int(duration * 1000)
+            )
+            .replace("  ", "")
+            .replace("\n", "")
+        )
+        self.send(
+            cdp.runtime.evaluate(
+                script,
+                await_promise=True,
+                user_gesture=True,
+            )
+        )
+
+
+    def block_urls(self, urls) -> None:
+        # You usually don't need to close it because we automatically close it when script is cancelled (ctrl + c) or completed
+        self.send(enable_network())
+        self.send(block_urls(urls))
+
+    def block_images_and_css(self) -> None:
+        images_and_css_patterns = [
+                ".css",
+                ".jpg",
+                ".jpeg",
+                ".png",
+                ".webp",
+                ".svg",
+                ".gif",
+                ".woff",
+                ".pdf",
+                ".zip",
+                ".ico",
+            ]
+    
+        self.block_urls(
+            images_and_css_patterns
+        )
+
+    def block_images(self) -> None:
+        images_patterns = [
+                ".jpg",
+                ".jpeg",
+                ".png",
+                ".webp",
+                ".svg",
+                ".gif",
+                ".woff",
+                ".pdf",
+                ".zip",
+                ".ico",
+            ]
+    
+        self.block_urls(
+            images_patterns
+        )
+        
     def __eq__(self, other: Tab):
         try:
             return other.target == self.target
@@ -1187,12 +1910,77 @@ if (resp instanceof Promise) {
             raise AttributeError(
                 f'"{self.__class__.__name__}" has no attribute "%s"' % item
             )
-
     def __repr__(self):
-        extra = ""
         if self.target.url:
             extra = f"[url: {self.target.url}]"
             s = f"<{type(self).__name__} [{self.target_id}] [{self.type_}] {extra}>"
         else: 
             s = f"<{type(self).__name__} [{self.target_id}] [{self.type_}]>"
         return s
+
+class Frame(cdp.page.Frame):
+    execution_contexts: typing.Dict[str, ExecutionContext] = {}
+
+    def __init__(self, id_: cdp.page.FrameId, **kw):
+        none_gen = repeat_none
+        param_names = util.get_all_param_names(self.__class__)
+        param_names.remove("execution_contexts")
+        for k in kw:
+            param_names.remove(k)
+        params = dict(zip(param_names, none_gen))
+        params.update({"id_": id_, **kw})
+        super().__init__(**params)
+def repeat_none():
+    while True:
+        yield None
+
+class ExecutionContext(dict):
+    id: cdp.runtime.ExecutionContextId
+    frame_id: str
+    unique_id: str
+    _tab: Tab
+
+    def __init__(self, *a, **kw):
+        super().__init__()
+        super().__setattr__("__dict__", self)
+        d: typing.Dict[str, Union[Tab, str]] = dict(*a, **kw)
+        self._tab: Tab = d.pop("tab", None)
+        self.__dict__.update(d)
+
+    def __repr__(self):
+        return "<ExecutionContext (\n{}\n)".format(
+            "".join(f"\t{k} = {v}\n" for k, v in super().items() if k not in ("_tab"))
+        )
+
+    def evaluate(
+        self,
+        expression,
+        allow_unsafe_eval_blocked_by_csp: bool = True,
+        await_promises: bool = False,
+        generate_preview: bool = False,
+    ):
+        try:
+            raw = self._tab.send(
+                cdp.runtime.evaluate(
+                    expression=expression,
+                    context_id=self.get("id_"),
+                    generate_preview=generate_preview,
+                    return_by_value=False,
+                    allow_unsafe_eval_blocked_by_csp=allow_unsafe_eval_blocked_by_csp,
+                    await_promise=await_promises,
+                )
+            )
+            if raw:
+                remote_object, errors = raw
+                if errors:
+                    raise ChromeException(errors)
+
+                if remote_object:
+                    return remote_object
+
+                # else:
+                #     return remote_object, errors
+
+        except:  # noqa
+            raise
+

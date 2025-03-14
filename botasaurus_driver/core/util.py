@@ -3,19 +3,15 @@ import os
 import types
 import typing
 from typing import Optional, List, Set, Union, Callable
-
-import typing
-
 from ..exceptions import JavascriptRuntimeException, handle_exception
 
 from .element import Element
-
 if typing.TYPE_CHECKING:
     from .browser import Browser, PathLike
 from .config import Config
 from .. import cdp
 
-__registered__instances__: Set[Browser] = set()
+__registered__instances__ = set()
 
 T = typing.TypeVar("T")
 # https://stackoverflow.com/questions/38518998/selenium-leaves-behind-running-processes
@@ -43,27 +39,27 @@ def get_remote_object_value(x,core):
 def start(
     config: Optional[Config] = None,
     *,
-    profile_directory: Optional[PathLike] = None,
+    profile_directory: Optional[str] = None,
     headless: Optional[bool] = False,
-    browser_executable_path: Optional[PathLike] = None,
+    browser_executable_path: Optional[str] = None,
     browser_args: Optional[List[str]] = None,
     sandbox: Optional[bool] = True,
     lang: Optional[str] = None,
-) -> Browser:
+):
     """
     helper function to launch a browser. it accepts several keyword parameters.
     conveniently, you can just call it bare (no parameters) to quickly launch an instance
     with best practice defaults.
-    note: this should be called ```await start()```
+    note: this should be called ```start()```
 
     :param profile_directory:
-    :type profile_directory: PathLike
+    :type profile_directory: str
 
     :param headless:
     :type headless: bool
 
     :param browser_executable_path:
-    :type browser_executable_path: PathLike
+    :type browser_executable_path: str
 
     :param browser_args: ["--some-chromeparam=somevalue", "some-other-param=someval"]
     :type browser_args: List[str]
@@ -76,16 +72,6 @@ def start(
     :type lang: str
     :return:
     """
-    if not config:
-        config = Config(
-            profile_directory,
-            headless,
-            browser_executable_path,
-            browser_args,
-            sandbox,
-            lang,
-        )
-
     from .browser import Browser
     return Browser.create(config)
 
@@ -150,7 +136,29 @@ def filter_recurse(doc: T, predicate: Callable[[cdp.dom.Node, Element], bool]) -
             if result:
                 return result
 
-def cdp_get_module(domain: Union[str]):
+
+def flatten_frame_tree(
+    tree: Union[cdp.page.FrameResourceTree, cdp.page.FrameTree]
+):
+    yield tree.frame
+    if tree.child_frames:
+        for child in tree.child_frames:
+            yield from flatten_frame_tree(child)
+
+
+def get_all_param_names(cls):
+    comp = cls.mro()
+    ret = []
+    for c in comp:
+        if not hasattr(c, "__annotations__"):
+            continue
+        for ann in c.__annotations__:
+            if ann not in ret:
+                ret.append(ann)
+    return ret
+
+
+def cdp_get_module(domain: Union[str, types.ModuleType]):
     """
     get cdp module by given string
 

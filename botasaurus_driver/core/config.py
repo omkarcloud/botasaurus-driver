@@ -54,9 +54,6 @@ def clean_profile(profile):
         return str(profile).strip()
 
 
-def should_force_headless():
-    return is_vmish
-
 
 def should_force_no_sandbox():
     return is_docker
@@ -209,7 +206,20 @@ class Config:
         # other keyword args will be accessible by attribute
         super().__init__()
         self.default_arguments = [
-            
+            "--remote-allow-origins=*",
+            "--no-first-run",
+            "--no-service-autorun",
+            "--no-default-browser-check",
+            "--homepage=about:blank",
+            "--no-pings",
+            "--password-store=basic",
+            "--disable-infobars",
+            "--disable-breakpad",
+            "--disable-dev-shm-usage",
+            "--disable-session-crashed-bubble",
+            "--disable-features=IsolateOrigins,site-per-process",
+            "--disable-search-engine-choice-screen",
+
         ]
 
     @property
@@ -222,14 +232,9 @@ class Config:
         if self._display:
             self._display.stop()
 
-    def __getattr__(self, item):
-        if item not in self.__dict__:
-            return
-
     def __call__(self):
-        args = self.default_arguments
+        args = self.default_arguments.copy()
         user_dr = "--user-data-dir=%s" % self.profile_directory
-        args.append(user_dr)
 
         if self.arguments:
             args.extend(self.arguments)
@@ -270,71 +275,10 @@ class Config:
         if self.local_proxy:
             args.append(f"--proxy-server=" + self.local_proxy)
 
+        args.append(user_dr)
         args = unique_keys(args)
+        return args
 
-        return args + [
-            # "--disable-background-timer-throttling",
-            # "--disable-client-side-phishing-detection",
-            # "--disable-default-apps",
-            # "--disable-domain-reliability",
-            # "--disable-hang-monitor",
-            # "--disable-ipc-flooding-protection",
-            # "--disable-prompt-on-repost",
-            # "--disable-sync",
-            # "--force-fieldtrials=*BackgroundTracing/default/",
-            # "--metrics-recording-only",
-            "--remote-allow-origins=*",
-            # "--start-maximized",
-            # "--use-mock-keychain",
-# # ---
-#             "--disable-background-networking",
-            
-#             "--disable-backgrounding-occluded-windows",
-#             "--disable-breakpad",
-#             "--disable-component-update",
-#             "--disable-dev-shm-usage",
-#             "--disable-features=IsolateOrigins,site-per-process",
-#             "--disable-infobars",
-#             "--disable-renderer-backgrounding",
-#             "--disable-search-engine-choice-screen",
-#             "--disable-session-crashed-bubble",
-            
-#             "--disable-session-crashed-bubble",
-            # "--homepage=about:blank",
-
-            # "--no-default-browser-check",
-            "--no-first-run",
-            # "--no-pings",
-            # "--no-service-autorun",
-            # "--password-store=basic",
-            user_dr,
-            host_str,
-            port_str,
-        ]
-        # return [
-        #     "--disable-background-networking",
-        #     "--disable-backgrounding-occluded-windows",
-        #     "--disable-breakpad",
-        #     "--disable-component-update",
-        #     "--disable-dev-shm-usage",
-        #     "--disable-features=IsolateOrigins,site-per-process",
-        #     # "--disable-features=IsolateOrigins,site-per-process",
-        #     "--disable-infobars",
-        #     "--disable-renderer-backgrounding",
-        #     "--disable-search-engine-choice-screen",
-        #     "--disable-session-crashed-bubble",
-        #     "--disable-session-crashed-bubble",
-        #     "--homepage=about:blank",
-        #     "--no-default-browser-check",
-        #     "--no-first-run",
-        #     "--no-pings",
-        #     "--no-service-autorun",
-        #     "--password-store=basic",
-        #     user_dr,
-        #     host_str,
-        #     port_str,
-        # ]
-        # return args
 
     def add_argument(self, arg: str):
 
@@ -354,10 +298,6 @@ class Config:
             s += f"\n\t{k} = {v}"
         return s
 
-    #     d = self.__dict__.copy()
-    #     d.pop("browser_args")
-    #     d["browser_args"] = self()
-    #     return d
 
 
 def get_linux_executable_path():
@@ -366,11 +306,11 @@ def get_linux_executable_path():
     for executable in (
         "google-chrome",
         "google-chrome-stable",
+        "chromium",
+        "chromium-browser",
         "google-chrome-beta",
         "google-chrome-dev",
-        "chromium-browser",
-        "chromium",
-    ):
+                "chrome",):
         path = shutil.which(executable)
         if path is not None:
             return path
@@ -380,7 +320,7 @@ def get_linux_executable_path():
     )
 
 
-def find_chrome_executable(return_all=False):
+def find_chrome_executable():
     """
     Determines the path to the Google Chrome executable on the system based on the platform.
 
@@ -392,7 +332,8 @@ def find_chrome_executable(return_all=False):
         )  # This function already exists in your code and finds Chrome on Linux.
     elif sys.platform.startswith("darwin"):
         possible_paths = [
-            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+                "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                "/Applications/Chromium.app/Contents/MacOS/Chromium",
         ]
         for path in possible_paths:
             if os.path.isfile(path):

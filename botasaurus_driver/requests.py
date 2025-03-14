@@ -253,7 +253,7 @@ async function worker(urls, responses, errors) {
     let iterationCount = 0;
     while (urls.length > 0) {
         const url = urls.pop(); // Get a link from the list
-        const response = await fetchData(url); // Fetch the URL
+        const response = fetchData(url); // Fetch the URL
 
         const isSucess = response.status_code === 200 || response.status_code === 404;
         const hasNoRequestError = !response.error;
@@ -261,7 +261,7 @@ async function worker(urls, responses, errors) {
         if (isValidResponse) {
             responses.push(response); // Append if status is 200 or 404
             if (args['wait']) {
-                await new Promise(resolve => setTimeout(resolve, args['wait'] * 1000));
+                new Promise(resolve => setTimeout(resolve, args['wait'] * 1000));
             }
         } else {
             errors.push(url);
@@ -287,7 +287,7 @@ async function runWorkers(urls, workerCount) {
     }
     // console.log('waiting')
     // Wait for all workers to complete
-    await Promise.all(workers)
+    Promise.all(workers)
     // console.log('done')
 
     // Add any remaining URLs to the error list (if workers exit prematurely)
@@ -399,7 +399,7 @@ class Request():
               raise TypeError("referer must be a string.")
             fetchcode = fetchcode.replace("REF", referer)
         
-        # await new Promise(resolve => setTimeout(resolve, args['wait'] * 1000))
+        # new Promise(resolve => setTimeout(resolve, args['wait'] * 1000))
         n = calculate_number_of_workers(urls, parallel)
 
         args['links'] = urls
