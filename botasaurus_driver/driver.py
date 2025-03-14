@@ -46,124 +46,13 @@ class Wait:
     LONG = 8
     VERY_LONG = 16
 
-def _get_iframe_tab(driver, internal_elem):
-    iframe_tab = None
-    all_targets = driver._browser.targets
-    internal_frame_id = str(internal_elem.frame_id)
-    # print(all_targets, internal_frame_id)
-    for tgt in all_targets:
-        if str(tgt.target.target_id) == internal_frame_id:
-            iframe_tab = tgt
-            break
-    return iframe_tab
-
-
-def get_iframe_tab(driver, internal_elem):
-    iframe_tab = _get_iframe_tab(driver, internal_elem)
-
-    if iframe_tab:
-        return iframe_tab
-
-    # start_time = time.time()
-    # timeout = 8
-
-    # while True:
-    #     iframe_tab = _get_iframe_tab(driver, internal_elem)
-    #     if iframe_tab:
-    #         return iframe_tab
-
-    #     driver._update_targets()
-
-    #     if time.time() - start_time > timeout:
-    #         internal_frame_id = str(internal_elem.frame_id)
-    #         raise IframeNotFoundException(internal_frame_id)
-
-    #     time.sleep(0.1)
-    #     # time.sleep(2)
-
-
-def wait_for_iframe_tab_load(driver, iframe_tab):
-    iframe_tab.websocket_url = iframe_tab.websocket_url.replace("iframe", "page")
-    # wait_till_document_is_ready(iframe_tab, True)
-
-
-def get_iframe_element_or_tab(iframe_tab, driver, current_tab, internal_elem):
-    if iframe_tab:
-        wait_for_iframe_tab_load(driver, iframe_tab)
-        return IframeTab(driver.config, iframe_tab, driver._browser)
-        
-    elem = Element(driver, current_tab, internal_elem)
-    return IframeElement(elem, driver.config, current_tab, driver._browser)
-
-def create_iframe_element(driver, current_tab, internal_elem):
-    iframe_tab = get_iframe_tab(driver, internal_elem)
-    return get_iframe_element_or_tab(iframe_tab, driver, current_tab, internal_elem)
-
-
-def get_iframe_elem_by_link(driver, link, timeout):
-    iframe_tab = get_iframe_tab_by_link(driver, link, timeout)
-    if iframe_tab:
-        return get_iframe_element_or_tab(iframe_tab, driver, None, None)
-    # TODO: FIX THIS 
-    # else 
-        # select iframes 
-        # find url
-        # return it making elem. 
-    return None
-
-
-def matches_regex(s, pattern):
-    import re
-
-    # Compile the regex pattern
-    regex = re.compile(pattern)
-    # Use the search method to find a match
-    match = regex.search(s)
-    # Return True if a match is found, False otherwise
-    return bool(match)
-
-
-def _perform_get_frame(driver, link):
-    all_targets = driver._browser.targets
-    for tgt in all_targets:
-        if str(tgt.target.type_) == "iframe":
-            if link:
-                if matches_regex(tgt.target.url, link):
-                    return tgt
-            else:
-                return tgt
-
-
-def get_iframe_tab_by_link(driver, link, timeout):
-    iframe_tab = _perform_get_frame(driver, link)
-
-    if iframe_tab:
-        return iframe_tab
-
-    if timeout:
-        start_time = time.time()
-        while True:
-            iframe_tab = _perform_get_frame(driver, link)
-            if iframe_tab:
-                return iframe_tab
-
-            driver._update_targets()
-
-            if time.time() - start_time > timeout:
-                return None
-
-            time.sleep(0.1)
-
-
-
 def make_element(driver, current_tab, internal_elem):
     if not internal_elem:
         return None
     if internal_elem._node.node_name == "IFRAME":
-        return create_iframe_element(driver,current_tab, internal_elem)
+        return create_iframe_element(driver, current_tab, internal_elem)
     else:
         return Element(driver, current_tab, internal_elem)
-
 
 def get_all_parents(node):
     if node is None:
@@ -178,29 +67,27 @@ def get_all_parents(node):
 
     return parents
 
-
-def perform_select_options(select_element:'Element', value, index, label, ):
-        if value is None and index is None and label is None:
-            raise ValueError("One of 'value', 'index', or 'label' must be provided.")
-        if value is not None:
-            if isinstance(value, list):
-                for v in value:
-                    select_element.select(f"option[value='{v}']")._elem. perform_select_option()
-            else:
-                select_element.select(f"option[value='{value}']")._elem.perform_select_option()
-        elif index is not None:
-            if isinstance(index, list):
-                for i in index:
-                    select_element.select(f"option:nth-child({i + 1})")._elem.perform_select_option()
-            else:
-                select_element.select(f"option:nth-child({index + 1})")._elem.perform_select_option()
-        elif label is not None:
-            if isinstance(label, list):
-                for l in label:
-                    select_element.select(f"option[label='{l}']")._elem.perform_select_option()
-            else:
-                select_element.select(f"option[label='{label}']")._elem.perform_select_option()
-
+def perform_select_options(select_element:'Element', value, index, label):
+    if value is None and index is None and label is None:
+        raise ValueError("One of 'value', 'index', or 'label' must be provided.")
+    if value is not None:
+        if isinstance(value, list):
+            for v in value:
+                select_element.select(f"option[value='{v}']")._elem.perform_select_option()
+        else:
+            select_element.select(f"option[value='{value}']")._elem.perform_select_option()
+    elif index is not None:
+        if isinstance(index, list):
+            for i in index:
+                select_element.select(f"option:nth-child({i + 1})")._elem.perform_select_option()
+        else:
+            select_element.select(f"option:nth-child({index + 1})")._elem.perform_select_option()
+    elif label is not None:
+        if isinstance(label, list):
+            for l in label:
+                select_element.select(f"option[label='{l}']")._elem.perform_select_option()
+        else:
+            select_element.select(f"option[label='{label}']")._elem.perform_select_option()
 class Element:
     def __init__(self, driver:'BrowserTab', tab: Tab, elem: CoreElement):
         self._driver = driver
@@ -602,7 +489,7 @@ class Element:
 
         if wait_for_download_completion:
             while not self.is_video_downloaded():
-                sleep(1)
+                time.sleep(1)
 
             print(f"View downloaded video at {relative_path}")
 
@@ -625,149 +512,6 @@ class Element:
           return self._elem.apply(script,args=args)
         except Exception as e:
           print('An exception occurred')
-
-def get_for_input_selector(type, for_attr):
-    if type == "text":
-        return f"input[id='{for_attr}'], textarea[id='{for_attr}']"
-    elif type == "checkbox":
-        return f"input[id='{for_attr}']"
-    else:
-        return f"input[id='{for_attr}'], textarea[id='{for_attr}'], select[id='{for_attr}']"
-
-def get_title_safe(driver):
-        while True:
-            try:
-                el = driver.select("title", None)
-                if el is not None:
-                    return el.text
-                else:
-                    return driver.run_js("return document.title")
-                
-            except DetachedElementException:
-                print("Title element is detached, Regetting")
-                pass
-            
-def get_inside_input_selector(type):
-    if type == "text":
-        return "input,textarea"
-    elif type == "checkbox":
-        return "input"
-    else:
-        return "input,textarea,select"
-
-
-def get_input_el(driver, label, wait, type):
-    els = driver.get_all_elements_containing_text(label, wait=wait)
-    # Prioritize Label Elements
-    for el in els:
-        if el.tag_name == "label":
-            for_attr = el.attributes.get("for")
-            if for_attr:
-                input_elem = driver.select(
-                    get_for_input_selector(type, for_attr),
-                    None,
-                )
-            else:
-                input_elem = el.select(get_inside_input_selector(type), wait=None)
-
-            if input_elem:
-                return input_elem
-
-    for el in els:
-        if el.tag_name != "label":
-
-            label_elem = el.get_parent_which_is("label")
-            if label_elem:
-                for_attr = label_elem.attributes.get("for")
-                if for_attr:
-                    input_elem = driver.select(
-                        get_for_input_selector(type, for_attr),
-                        None,
-                    )
-                else:
-                    input_elem = label_elem.select(
-                        get_inside_input_selector(type), wait=None
-                    )
-
-                if input_elem:
-                    return input_elem
-
-    return None
-
-
-
-
-
-def base64_decode(encoded_str):
-    from base64 import b64decode
-    """
-    Decodes a base64 encoded string.
-    
-    :param encoded_str: A base64 encoded string.
-    :return: The decoded string.
-    """
-    # Decoding the base64 encoded string
-    decoded_bytes = b64decode(encoded_str)
-    # Converting the bytes to string
-    decoded_str = decoded_bytes.decode("utf-8")
-
-    return decoded_str
-
-class Response(ContraDict):
-    def __init__(self, request_id, content, is_base_64):
-        self.request_id = request_id
-        self.content = content
-        self.is_base_64 = is_base_64
-        super().__init__(self.to_dict())
-
-    def to_dict(self):
-        return {
-            "request_id": self.request_id,
-            "content": self.content,
-            "is_base_64": self.is_base_64,
-        }
-
-    def get_decoded_content(self):
-        """
-        Decodes the content if it's Base64 encoded, otherwise returns it as-is.
-        """
-        if self.is_base_64:
-            try:
-                return base64_decode(self.content)
-            except Exception as e:
-                raise ValueError(f"Error decoding base64 content: {e}")
-        return self.content
-
-    def get_json_content(self):
-        """
-        Attempts to parse the content as JSON.
-        """
-        try:
-            return json.loads(self.get_decoded_content())
-        except json.JSONDecodeError as e:
-            raise ValueError(f"Error decoding JSON content: {e}")
-
-    def __repr__(self):
-        return f"Response(request_id={self.request_id}, content={self.content}, is_base_64={self.is_base_64})"
-
-class Responses(list):
-        def __init__(self, driver:'Driver'):
-            super().__init__()
-            self.driver = driver
-
-        def collect(self):
-            return self.driver.collect_responses(self)
-
-
-def generate_random_string(length: int = 32) -> str:
-    import random
-    import string
-    letters = string.ascii_letters
-    return ''.join(random.choice(letters) for i in range(length))
-
-
-_user_agent = None
-
 
 class BrowserTab:
     def __init__(self, config, _tab_value:Tab, _browser:Browser):
@@ -1567,11 +1311,9 @@ class BrowserTab:
 
 
 class IframeTab(BrowserTab):
-
     @property
     def iframe_url(self) -> Tab:
         return self._tab_value.target.url
-
 
 class IframeElement(BrowserTab):
     def __init__(self, elem: Element, config, _tab_value:Tab, _browser:Browser):
@@ -1590,6 +1332,256 @@ class IframeElement(BrowserTab):
     def select(self, selector: str, wait: Optional[int] = Wait.SHORT) -> Element:
         return self.elem.select(selector, wait)
 
+def _get_iframe_tab(driver, internal_elem):
+    iframe_tab = None
+    all_targets = driver._browser.targets
+    internal_frame_id = str(internal_elem.frame_id)
+    # print(all_targets, internal_frame_id)
+    for tgt in all_targets:
+        if str(tgt.target.target_id) == internal_frame_id:
+            iframe_tab = tgt
+            break
+    return iframe_tab
+
+
+def get_iframe_tab(driver, internal_elem):
+    iframe_tab = _get_iframe_tab(driver, internal_elem)
+
+    if iframe_tab:
+        return iframe_tab
+
+    # start_time = time.time()
+    # timeout = 8
+
+    # while True:
+    #     iframe_tab = _get_iframe_tab(driver, internal_elem)
+    #     if iframe_tab:
+    #         return iframe_tab
+
+    #     driver._update_targets()
+
+    #     if time.time() - start_time > timeout:
+    #         internal_frame_id = str(internal_elem.frame_id)
+    #         raise IframeNotFoundException(internal_frame_id)
+
+    #     time.sleep(0.1)
+    #     # time.sleep(2)
+
+
+def wait_for_iframe_tab_load(driver, iframe_tab):
+    iframe_tab.websocket_url = iframe_tab.websocket_url.replace("iframe", "page")
+    # wait_till_document_is_ready(iframe_tab, True)
+
+
+def get_iframe_element_or_tab(iframe_tab, driver, current_tab, internal_elem):
+    if iframe_tab:
+        wait_for_iframe_tab_load(driver, iframe_tab)
+        return IframeTab(driver.config, iframe_tab, driver._browser)
+        
+    elem = Element(driver, current_tab, internal_elem)
+    return IframeElement(elem, driver.config, current_tab, driver._browser)
+
+def create_iframe_element(driver, current_tab, internal_elem):
+    iframe_tab = get_iframe_tab(driver, internal_elem)
+    return get_iframe_element_or_tab(iframe_tab, driver, current_tab, internal_elem)
+
+
+def get_iframe_elem_by_link(driver, link, timeout):
+    iframe_tab = get_iframe_tab_by_link(driver, link, timeout)
+    if iframe_tab:
+        return get_iframe_element_or_tab(iframe_tab, driver, None, None)
+    # TODO: FIX THIS 
+    # else 
+        # select iframes 
+        # find url
+        # return it making elem. 
+    return None
+
+
+def matches_regex(s, pattern):
+    import re
+
+    # Compile the regex pattern
+    regex = re.compile(pattern)
+    # Use the search method to find a match
+    match = regex.search(s)
+    # Return True if a match is found, False otherwise
+    return bool(match)
+
+
+def _perform_get_frame(driver, link):
+    all_targets = driver._browser.targets
+    for tgt in all_targets:
+        if str(tgt.target.type_) == "iframe":
+            if link:
+                if matches_regex(tgt.target.url, link):
+                    return tgt
+            else:
+                return tgt
+
+
+def get_iframe_tab_by_link(driver, link, timeout):
+    iframe_tab = _perform_get_frame(driver, link)
+
+    if iframe_tab:
+        return iframe_tab
+
+    if timeout:
+        start_time = time.time()
+        while True:
+            iframe_tab = _perform_get_frame(driver, link)
+            if iframe_tab:
+                return iframe_tab
+
+            driver._update_targets()
+
+            if time.time() - start_time > timeout:
+                return None
+
+            time.sleep(0.1)
+
+
+def get_for_input_selector(type, for_attr):
+    if type == "text":
+        return f"input[id='{for_attr}'], textarea[id='{for_attr}']"
+    elif type == "checkbox":
+        return f"input[id='{for_attr}']"
+    else:
+        return f"input[id='{for_attr}'], textarea[id='{for_attr}'], select[id='{for_attr}']"
+
+def get_title_safe(driver):
+        while True:
+            try:
+                el = driver.select("title", None)
+                if el is not None:
+                    return el.text
+                else:
+                    return driver.run_js("return document.title")
+                
+            except DetachedElementException:
+                print("Title element is detached, Regetting")
+                pass
+            
+def get_inside_input_selector(type):
+    if type == "text":
+        return "input,textarea"
+    elif type == "checkbox":
+        return "input"
+    else:
+        return "input,textarea,select"
+
+
+def get_input_el(driver, label, wait, type):
+    els = driver.get_all_elements_containing_text(label, wait=wait)
+    # Prioritize Label Elements
+    for el in els:
+        if el.tag_name == "label":
+            for_attr = el.attributes.get("for")
+            if for_attr:
+                input_elem = driver.select(
+                    get_for_input_selector(type, for_attr),
+                    None,
+                )
+            else:
+                input_elem = el.select(get_inside_input_selector(type), wait=None)
+
+            if input_elem:
+                return input_elem
+
+    for el in els:
+        if el.tag_name != "label":
+
+            label_elem = el.get_parent_which_is("label")
+            if label_elem:
+                for_attr = label_elem.attributes.get("for")
+                if for_attr:
+                    input_elem = driver.select(
+                        get_for_input_selector(type, for_attr),
+                        None,
+                    )
+                else:
+                    input_elem = label_elem.select(
+                        get_inside_input_selector(type), wait=None
+                    )
+
+                if input_elem:
+                    return input_elem
+
+    return None
+
+
+
+
+
+def base64_decode(encoded_str):
+    from base64 import b64decode
+    """
+    Decodes a base64 encoded string.
+    
+    :param encoded_str: A base64 encoded string.
+    :return: The decoded string.
+    """
+    # Decoding the base64 encoded string
+    decoded_bytes = b64decode(encoded_str)
+    # Converting the bytes to string
+    decoded_str = decoded_bytes.decode("utf-8")
+
+    return decoded_str
+
+class Response(ContraDict):
+    def __init__(self, request_id, content, is_base_64):
+        self.request_id = request_id
+        self.content = content
+        self.is_base_64 = is_base_64
+        super().__init__(self.to_dict())
+
+    def to_dict(self):
+        return {
+            "request_id": self.request_id,
+            "content": self.content,
+            "is_base_64": self.is_base_64,
+        }
+
+    def get_decoded_content(self):
+        """
+        Decodes the content if it's Base64 encoded, otherwise returns it as-is.
+        """
+        if self.is_base_64:
+            try:
+                return base64_decode(self.content)
+            except Exception as e:
+                raise ValueError(f"Error decoding base64 content: {e}")
+        return self.content
+
+    def get_json_content(self):
+        """
+        Attempts to parse the content as JSON.
+        """
+        try:
+            return json.loads(self.get_decoded_content())
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Error decoding JSON content: {e}")
+
+    def __repr__(self):
+        return f"Response(request_id={self.request_id}, content={self.content}, is_base_64={self.is_base_64})"
+
+class Responses(list):
+        def __init__(self, driver:'Driver'):
+            super().__init__()
+            self.driver = driver
+
+        def collect(self):
+            return self.driver.collect_responses(self)
+
+
+def generate_random_string(length: int = 32) -> str:
+    import random
+    import string
+    letters = string.ascii_letters
+    return ''.join(random.choice(letters) for i in range(length))
+
+
+_user_agent = None
 class Driver(BrowserTab):
     def __init__(
         self,
@@ -1745,7 +1737,7 @@ class Driver(BrowserTab):
             while True:
                 if currenturl != self.current_url:
                     break
-                sleep(0.1)
+                time.sleep(0.1)
         self.sleep(wait)
 
         wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load, timeout=timeout)
