@@ -9,6 +9,9 @@ class DriverException(Exception):
         exception_msg = f"{self.msg}"
         return exception_msg
 
+class UnavailableMethodError(DriverException):
+    pass
+
 class GoogleCookieConsentException(DriverException):
     """
     Thrown when unable to consent to Google cookies.

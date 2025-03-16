@@ -237,12 +237,12 @@ class Connection:
             # no listener created yet
             pass
 
-    def __getattr__(self, item):
-        """:meta private:"""
-        try:
-            return getattr(self.target, item)
-        except AttributeError:
-            raise
+    # def __getattr__(self, item):
+    #     """:meta private:"""
+    #     try:
+    #         return getattr(self.target, item)
+    #     except AttributeError:
+    #         raise
 
     def __enter__(self):
         """:meta private:"""

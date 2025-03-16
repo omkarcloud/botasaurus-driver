@@ -16,13 +16,27 @@ from .. import cdp
 if typing.TYPE_CHECKING:
     from .tab import Tab
 
-def make_core_string(SCRIPT,args ):
+def is_function(SCRIPT:str):
+    if SCRIPT.startswith("function"):
+      # Function keyword function
+        return SCRIPT.endswith("}") and "{" in SCRIPT
+    elif SCRIPT.startswith("(") and "=>" in SCRIPT:
+        # Arrow function
+        return True
+    else:
+        return False
+
+def make_core_string(SCRIPT:str,args):
+            SCRIPT= SCRIPT.strip()
+            if not is_function(SCRIPT) :
+              SCRIPT = r"(el)=>{SCRIPT}".replace("SCRIPT", SCRIPT)
             expression = r"const args = JSON.parse('ARGS'); const resp = (SCRIPT)(element);".replace("SCRIPT", SCRIPT)
             if args is not None:
                 expression = expression.replace("ARGS",  json.dumps(args).replace(r'\"', r'\\"'))
             else:
                 expression = expression.replace("const args = JSON.parse('ARGS'); ", "")
             return expression
+
 def create(node: cdp.dom.Node, tab: Tab, tree: typing.Optional[cdp.dom.Node] = None):
     """
     factory for Elements
@@ -1193,6 +1207,53 @@ class Element:
         s = f"<{tag_name} {attrs}>{content}</{tag_name}>"
         return s
 
+    def js_dumps(
+        self, obj_name: str, return_by_value = True
+    ) -> typing.Union[
+        typing.Dict,
+        typing.Tuple[cdp.runtime.RemoteObject, cdp.runtime.ExceptionDetails],
+    ]:
+        """
+        dump given js object with its properties and values as a dict
+
+        note: complex objects might not be serializable, therefore this method is not a "source of thruth"
+
+        :param obj_name: the js object to dump
+        :type obj_name: str
+
+        :param return_by_value: if you want an tuple of cdp objects (returnvalue, errors), set this to False
+        :type return_by_value: bool
+
+        example
+        ------
+
+        x = self.js_dumps('window')
+        print(x)
+            '...{
+            'pageYOffset': 0,
+            'visualViewport': {},
+            'screenX': 10,
+            'screenY': 10,
+            'outerWidth': 1050,
+            'outerHeight': 832,
+            'devicePixelRatio': 1,
+            'screenLeft': 10,
+            'screenTop': 10,
+            'styleMedia': {},
+            'onsearch': None,
+            'isSecureContext': True,
+            'trustedTypes': {},
+            'performance': {'timeOrigin': 1707823094767.9,
+            'timing': {'connectStart': 0,
+            'navigationStart': 1707823094768,
+            ]...
+            '
+        """
+        self.raise_if_disconnected()
+        js_code_a = util.get_jscode(obj_name)
+        # we're purposely not calling self.evaluate here to prevent infinite loop on certain expressions
+        return self.apply(js_code_a, None,return_by_value )
+     
 class Position(cdp.dom.Quad):
     """helper class for element positioning"""
 

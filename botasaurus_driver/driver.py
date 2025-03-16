@@ -5,12 +5,13 @@ from time import sleep
 import time
 from typing import Callable, Optional, Union, List, Any
 
-from .exceptions import ChromeException
+from .exceptions import ChromeException, DriverException, UnavailableMethodError
 
 from .core.config import Config
 from .tiny_profile import load_cookies, save_cookies
 from . import cdp
 from .core._contradict import ContraDict
+from .core.util import wait_for_result
 
 
 from .beep_utils import beep_input
@@ -151,10 +152,13 @@ class Element:
         return self._elem.get_position(absolute)
 
     def get_shadow_root(self, wait: Optional[int] = Wait.SHORT):
-        rect = self.get_bounding_rect()
-        x = rect.x
-        y = rect.y
-        elem = self._tab.get_element_at_point(x, y, wait)
+        def has_height():
+            rect = self.get_bounding_rect()
+            return rect if rect.height > 0 else None
+        rect = wait_for_result(has_height, max(wait, Wait.LONG))
+        if rect is None:
+            raise DriverException("Shadow root cannot be found because the element has no height.")
+        elem = self._tab.get_element_at_point(rect.x, rect.y, wait)
         return make_element(self._driver, self._tab, elem) if elem else None
 
     def select(self, selector: str, wait: Optional[int] = Wait.SHORT) -> "Element":
@@ -169,7 +173,7 @@ class Element:
 
     def select_iframe(
         self, selector: str, wait: Optional[int] = Wait.SHORT
-    ) -> "IframeElement":
+    ) -> Union["IframeElement", "IframeTab"]:
         return self.select(selector, wait)
 
     def click(
@@ -511,7 +515,7 @@ class Element:
         try:
           return self._elem.apply(script,args=args)
         except Exception as e:
-          print('An exception occurred')
+          raise
 
 class BrowserTab:
     def __init__(self, config, _tab_value:Tab, _browser:Browser):
@@ -568,7 +572,7 @@ class BrowserTab:
         self.native_fetch_name = rand
 
     def run_js(self, script: str, args: Optional[any]=None) -> Any:
-        # Run it in IIFE for isloation
+        # We will automatically run the script in an Immediately Invoked Function Expression (IIFE)
         return self._tab.evaluate(script,args=args,await_promise=True)
 
     def run_on_new_document(
@@ -697,13 +701,13 @@ class BrowserTab:
     
     def count(
         self, selector: str, wait: Optional[int] = Wait.SHORT
-    ) -> List[Element]:
+    ) -> int:
         return self._tab.count_select(selector, timeout=wait)
 
 
     def select_iframe(
         self, selector: str, wait: Optional[int] = Wait.SHORT
-    ) -> "IframeElement":
+    ) -> Union["IframeElement", "IframeTab"]:
         return self.select(selector, wait)
 
     def get_element_containing_text(
@@ -1222,53 +1226,6 @@ class BrowserTab:
         self.delete_cookies()
         self.delete_local_storage()
 
-    def is_in_page(self, target: str) -> bool:
-        return self.wait_for_page_to_be(target, wait=None, raise_exception=False)
-
-    def wait_for_page_to_be(
-        self,
-        expected_url: Union[str, List[str]],
-        wait: Optional[int] = 8,
-        raise_exception: bool = True
-    ) -> bool:
-        def check_page(driver, expected_url):
-            if expected_url.startswith("https://") or expected_url.startswith(
-                "http://"
-            ):
-                if isinstance(expected_url, str):
-                    return expected_url == driver.current_url
-                else:
-                    for url in expected_url:
-                        if url == driver.current_url:
-                            return True
-                return False
-            else:
-                if isinstance(expected_url, str):
-                    return expected_url in driver.current_url
-                else:
-                    for x in expected_url:
-                        if x in driver.current_url:
-                            return True
-                    return False
-
-        if wait is None:
-            if check_page(self, expected_url):
-                wait_till_document_is_ready(self._tab, True)
-                return True
-        else:
-            time = 0
-            while time < wait:
-                if check_page(self, expected_url):
-                    wait_till_document_is_ready(self._tab, True)
-                    return True
-                sleep_time = 0.2
-                time += sleep_time
-                sleep(sleep_time)
-
-            if raise_exception:
-                raise PageNotFoundException(expected_url, wait)
-            return False
-
     def save_screenshot(
         self,
         filename: Optional[str] = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ".png",
@@ -1312,26 +1269,286 @@ class BrowserTab:
 
 class IframeTab(BrowserTab):
     @property
-    def iframe_url(self) -> Tab:
+    def iframe_url(self) -> str:
         return self._tab_value.target.url
 
-class IframeElement(BrowserTab):
-    def __init__(self, elem: Element, config, _tab_value:Tab, _browser:Browser):
-        self.elem  = elem
-        super().__init__(config, _tab_value, _tab_value)
+    def get_bounding_rect(self, absolute=False):
+        # Ideally, this method should not be added, but we added it because users who use self.select instead of self.select_iframe get types of Element instead of IframeTab. We added these properties so users get the correct result when they call them.
+        return self.select('body').get_bounding_rect(absolute)
 
+    def get_shadow_root(self, wait: Optional[int] = Wait.SHORT):
+        # Ideally, this method should not be added, but we added it because users who use self.select instead of self.select_iframe get types of Element instead of IframeTab. We added these properties so users get the correct result when they call them.
+        return self.select('body').get_shadow_root(wait)
 
     @property
-    def current_url(self):
+    def text(self):
+        # Ideally, this method should not be added, but we added it because users who use self.select instead of self.select_iframe get types of Element instead of IframeTab. We added these properties so users get the correct result when they call them.
+        return self.page_html
+
+    @property
+    def html(self):
+        # Ideally, this method should not be added, but we added it because users who use self.select instead of self.select_iframe get types of Element instead of IframeTab. We added these properties so users get the correct result when they call them.
+        return self.page_text
+
+    @property
+    def tag_name(self):
+        # Ideally, this method should not be added, but we added it because users who use self.select instead of self.select_iframe get types of Element instead of IframeTab. We added these properties so users get the correct result when they call them.
+        return 'iframe'
+        
+class IframeElement(BrowserTab):
+    def __init__(self, elem: Element, doc_elem: Element, config, _tab_value:Tab, _browser:Browser):
+        self.elem  = elem
+        self.doc_elem  = doc_elem
+        super().__init__(config, _tab_value, _browser)
+
+
+    def raise_unavailable_error(self) -> Tab:
+        """
+        Raises an exception indicating that the method is not supported in this type of iframe.
+        """
+        raise UnavailableMethodError("This method is not supported in this type of iframe.")
+
+    @property
+    def iframe_url(self) -> str:
         return self.elem._elem.content_document.document_url
 
     @property
-    def iframe_url(self) -> Tab:
-        return self.current_url
+    def current_url(self):
+        return self.iframe_url
+
+    @property
+    def page_html(self):
+        return self.doc_elem.html
+
+    @property
+    def local_storage(self):
+        return LocalStorage(self)
+
+    def _update_targets(self):
+        self.raise_unavailable_error()
+
+
+    def prevent_fetch_spying(self) -> Any:
+        self.raise_unavailable_error()
+
+    def run_js(self, script: str, args: Optional[any]=None) -> Any:
+        return self.doc_elem.run_js(script, args)
+
+    def run_on_new_document(
+        self, script
+    ) -> None:
+        self.raise_unavailable_error()
+
+    def run_cdp_command(self, command) -> Any:
+        self.raise_unavailable_error()
+
+    def before_request_sent(self, handler: Callable[[str, cdp.network.Request, cdp.network.RequestWillBeSent], None]):
+        self.raise_unavailable_error()
+
+    def after_response_received(self, handler: Callable[[str, cdp.network.Response, cdp.network.ResponseReceived], None]):
+        self.raise_unavailable_error()
+        
+    def collect_response(self, request):
+        self.raise_unavailable_error()
+    
+    def collect_responses(self, request_ids):
+        self.raise_unavailable_error()
+
+    def get_js_variable(self, variable_name: str) -> Any:
+        return self.doc_elem._elem.js_dumps(variable_name)
 
     def select(self, selector: str, wait: Optional[int] = Wait.SHORT) -> Element:
         return self.elem.select(selector, wait)
+    
+    def click_at_point(self, x: int, y:int):
+        rect = self.elem.get_bounding_rect()
+        super().click_at_point(x+rect.x, y+rect.y)
 
+    def select_all(
+        self, selector: str, wait: Optional[int] = Wait.SHORT
+    ) -> List[Element]:
+        return self.elem.select_all(selector, wait)
+    
+    def count(
+        self, selector: str, wait: Optional[int] = Wait.SHORT
+    ) -> int:
+        return self._tab.count_select(selector, timeout=wait, _node = self.elem._elem)
+
+    def get_element_containing_text(
+        self,
+        text: str,
+        wait: Optional[int] = Wait.SHORT,
+        type: Optional[str] = None,
+    ) -> Element:
+        elem = self._tab.find_iframe(text, self.elem._elem,type=type, timeout=wait)
+        return make_element(self, self._tab, elem) if elem else None
+
+    def get_all_elements_containing_text(
+        self,
+        text: str,
+        wait: Optional[int] = Wait.SHORT,
+        type: Optional[str] = None,
+    ) -> List[Element]:
+        elems = self._tab.find_all_iframe(text, self.elem._elem,type=type, timeout=wait)
+        return [make_element(self, self._tab, e) for e in elems]
+
+    def get_element_with_exact_text(
+        self,
+        text: str,
+        wait: Optional[int] = Wait.SHORT,
+        type: Optional[str] = None,
+    ) -> Element:
+        elem = self._tab.find_iframe(text, self.elem._elem,type=type, timeout=wait, exact_match=True)
+        return make_element(self, self._tab, elem) if elem else None
+
+    def get_all_elements_with_exact_text(
+        self,
+        text: str,
+        wait: Optional[int] = Wait.SHORT,
+        type: Optional[str] = None,
+    ) -> List[Element]:
+        elems = self._tab.find_all_iframe(text, self.elem._elem,type=type, timeout=wait, exact_match=True)
+        return [make_element(self, self._tab, e) for e in elems]
+
+    def get_element_at_point(
+        self,
+        x: int,
+        y: int,
+        child_selector: Optional[str] = None,
+        wait: Optional[int] = Wait.SHORT,
+    ) -> Element:
+        rect = self.elem.get_bounding_rect()
+        return super().get_element_at_point(x+rect.x, y+rect.y, child_selector, wait)
+
+    def get_iframe_by_link(
+        self, link_regex: Optional[str] = None, wait: Optional[int] = Wait.SHORT
+    ):
+        return get_iframe_elem_by_link(self, link_regex, wait)
+
+    def click_element_containing_text(
+        self, text: str, wait: Optional[int] = Wait.SHORT
+    ) -> None:
+        elem = self.get_element_containing_text(text, wait)
+
+        if elem is None:
+            raise ElementWithTextNotFoundException(text)
+
+        elem.click()
+
+    def get_link(
+        self,
+        selector: str,
+        url_contains_text: Optional[str] = None,
+        element_contains_text: Optional[str] = None,
+        wait: Optional[int] = Wait.SHORT,
+    ) -> str:
+        elems = self._tab.select_all(selector, timeout=wait, node_name="a", _node = self.elem._elem)
+        
+        for elem in elems:
+            if url_contains_text and url_contains_text not in elem.href:
+                continue
+            if element_contains_text and element_contains_text not in elem.text:
+                continue
+            return elem.href
+
+        return None
+
+    def get_all_links(
+        self,
+        selector: Optional[str] = None,
+        url_contains_text: Optional[str] = None,
+        element_contains_text: Optional[str] = None,
+        wait: Optional[int] = Wait.SHORT,
+    ) -> List[str]:
+        elems = self._tab.select_all(
+            selector if selector else "a[href]", timeout=wait, node_name="a", _node = self.elem._elem
+        )
+
+        if url_contains_text:
+            elems = [elem for elem in elems if url_contains_text in elem.href]
+        if element_contains_text:
+            elems = [elem for elem in elems if element_contains_text in elem.text]
+        return [elem.href for elem in elems]
+
+    def get_image_link(
+        self,
+        selector: str,
+        url_contains_text: Optional[str] = None,
+        element_contains_text: Optional[str] = None,
+        wait: Optional[int] = Wait.SHORT,
+    ) -> str:
+        elems = self._tab.select_all(selector, timeout=wait, node_name="img",  _node = self.elem._elem)
+
+        for elem in elems:
+            if url_contains_text and url_contains_text not in elem.src:
+                continue
+            if element_contains_text and element_contains_text not in elem.text:
+                continue
+            return elem.src
+
+        return None
+
+    def get_all_image_links(
+        self,
+        selector: Optional[str] = None,
+        url_contains_text: Optional[str] = None,
+        element_contains_text: Optional[str] = None,
+        wait: Optional[int] = Wait.SHORT,
+    ) -> List[str]:
+        elems = self._tab.select_all(
+            selector if selector else "img[src]", timeout=wait, node_name="img", _node = self.elem._elem
+        )
+
+        if url_contains_text:
+            elems = [elem for elem in elems if url_contains_text in elem.src]
+
+        if element_contains_text:
+            elems = [elem for elem in elems if element_contains_text in elem.text]
+
+        return [elem.src for elem in elems]
+
+
+    def wait_for_element(
+        self, selector: str, wait: Optional[int] = Wait.SHORT
+    ) -> Element:
+        return self.elem.wait_for_element(selector, wait)
+
+    def save_screenshot(
+        self,
+        filename: Optional[str] = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ".png",
+    ) -> None:
+        self.elem.save_screenshot(filename=filename)
+
+    def download_file(self, url: str, filename: Optional[str] = None) -> None:
+        # if filename not provided, then try getting filename from url response, else fallback to default datetime filename
+        self._tab.download_file(url, filename, self.elem._elem)
+
+    def __repr__(self):
+        return self.elem.__repr__()
+    
+    def get_bounding_rect(self, absolute=False):
+        # Ideally, this method should not be added, but we added it because users who use self.select instead of self.select_iframe get types of Element instead of IframeTab. We added these properties so users get the correct result when they call them.
+        return self.elem.get_bounding_rect(absolute)
+
+    def get_shadow_root(self, wait: Optional[int] = Wait.SHORT):
+        # Ideally, this method should not be added, but we added it because users who use self.select instead of self.select_iframe get types of Element instead of IframeTab. We added these properties so users get the correct result when they call them.
+        return self.elem.get_shadow_root(wait)
+
+    @property
+    def text(self):
+        # Ideally, this method should not be added, but we added it because users who use self.select instead of self.select_iframe get types of Element instead of IframeTab. We added these properties so users get the correct result when they call them.
+        return self.page_text
+
+    @property
+    def html(self):
+        # Ideally, this method should not be added, but we added it because users who use self.select instead of self.select_iframe get types of Element instead of IframeTab. We added these properties so users get the correct result when they call them.
+        return self.page_html
+
+    @property
+    def tag_name(self):
+        # Ideally, this method should not be added, but we added it because users who use self.select instead of self.select_iframe get types of Element instead of IframeTab. We added these properties so users get the correct result when they call them.
+        return 'iframe'
+    
 def _get_iframe_tab(driver, internal_elem):
     iframe_tab = None
     all_targets = driver._browser.targets
@@ -1373,29 +1590,33 @@ def wait_for_iframe_tab_load(driver, iframe_tab):
     # wait_till_document_is_ready(iframe_tab, True)
 
 
-def get_iframe_element_or_tab(iframe_tab, driver, current_tab, internal_elem):
+def get_iframe_element_or_tab(iframe_tab, driver, current_tab, internal_elem:CoreElement):
     if iframe_tab:
         wait_for_iframe_tab_load(driver, iframe_tab)
         return IframeTab(driver.config, iframe_tab, driver._browser)
-        
+    internal_elem._tree = internal_elem.content_document
     elem = Element(driver, current_tab, internal_elem)
-    return IframeElement(elem, driver.config, current_tab, driver._browser)
+    # print(internal_elem.content_document.attributes)
+    doc_elem = Element(driver, current_tab, CoreElement(internal_elem.content_document, current_tab, internal_elem.tree))
+    return IframeElement(elem, doc_elem, driver.config, current_tab, driver._browser)
 
 def create_iframe_element(driver, current_tab, internal_elem):
     iframe_tab = get_iframe_tab(driver, internal_elem)
     return get_iframe_element_or_tab(iframe_tab, driver, current_tab, internal_elem)
 
 
-def get_iframe_elem_by_link(driver, link, timeout):
+def get_iframe_elem_by_link(driver:'BrowserTab', link, timeout):
     iframe_tab = get_iframe_tab_by_link(driver, link, timeout)
     if iframe_tab:
+        print(iframe_tab)
         return get_iframe_element_or_tab(iframe_tab, driver, None, None)
-    # TODO: FIX THIS 
-    # else 
-        # select iframes 
-        # find url
-        # return it making elem. 
-    return None
+    
+    iframes = driver.select_all("iframe")
+    print(iframes)
+    for el in iframes:
+        url = el.iframe_url
+        if matches_regex(url, link):
+            return el
 
 
 def matches_regex(s, pattern):
@@ -1581,7 +1802,6 @@ def generate_random_string(length: int = 32) -> str:
     return ''.join(random.choice(letters) for i in range(length))
 
 
-_user_agent = None
 class Driver(BrowserTab):
     def __init__(
         self,
@@ -1633,10 +1853,7 @@ class Driver(BrowserTab):
 
     @property
     def user_agent(self):
-        global _user_agent
-        if not _user_agent:
-            _user_agent = self.run_js("return navigator.userAgent")
-        return _user_agent
+        return self.run_js("return navigator.userAgent")
 
 
 
@@ -1751,7 +1968,55 @@ class Driver(BrowserTab):
         self._tab.reload()
         wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load)
         return self._tab
-            
+
+
+    def is_in_page(self, target: str) -> bool:
+        return self.wait_for_page_to_be(target, wait=None, raise_exception=False)
+
+    def wait_for_page_to_be(
+        self,
+        expected_url: Union[str, List[str]],
+        wait: Optional[int] = 8,
+        raise_exception: bool = True
+    ) -> bool:
+        def check_page(driver, expected_url):
+            if expected_url.startswith("https://") or expected_url.startswith(
+                "http://"
+            ):
+                if isinstance(expected_url, str):
+                    return expected_url == driver.current_url
+                else:
+                    for url in expected_url:
+                        if url == driver.current_url:
+                            return True
+                return False
+            else:
+                if isinstance(expected_url, str):
+                    return expected_url in driver.current_url
+                else:
+                    for x in expected_url:
+                        if x in driver.current_url:
+                            return True
+                    return False
+
+        if wait is None:
+            if check_page(self, expected_url):
+                wait_till_document_is_ready(self._tab, True)
+                return True
+        else:
+            time = 0
+            while time < wait:
+                if check_page(self, expected_url):
+                    wait_till_document_is_ready(self._tab, True)
+                    return True
+                sleep_time = 0.2
+                time += sleep_time
+                sleep(sleep_time)
+
+            if raise_exception:
+                raise PageNotFoundException(expected_url, wait)
+            return False
+
     def switch_to_tab(
         self, tab: Tab
     ) -> Tab:
@@ -1794,3 +2059,4 @@ class Driver(BrowserTab):
             save_cookies(self, self.config.profile)
         # You usually don't need to close it because we automatically close it when script is cancelled (ctrl + c) or completed
         self._browser.close()
+

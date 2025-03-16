@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os
+import time
 import types
 import typing
 from typing import Optional, List, Set, Union, Callable
@@ -189,3 +190,100 @@ def cdp_get_module(domain: Union[str, types.ModuleType]):
                     "could not find cdp module from input '%s'" % domain
                 )
     return domain_mod
+
+def get_jscode(obj_name):
+        js_code_a = (
+            """
+                           function ___dump(obj, _d = 0) {
+                               let _typesA = ['object', 'function'];
+                               let _typesB = ['number', 'string', 'boolean'];
+                               if (_d == 2) {
+                                   console.log('maxdepth reached for ', obj);
+                                   return
+                               }
+                               let tmp = {}
+                               for (let k in obj) {
+                                   if (obj[k] == window) continue;
+                                   let v;
+                                   try {
+                                       if (obj[k] === null || obj[k] === undefined || obj[k] === NaN) {
+                                           console.log('obj[k] is null or undefined or Nan', k, '=>', obj[k])
+                                           tmp[k] = obj[k];
+                                           continue
+                                       }
+                                   } catch (e) {
+                                       tmp[k] = null;
+                                       continue
+                                   }
+                                   if (_typesB.includes(typeof obj[k])) {
+                                       tmp[k] = obj[k]
+                                       continue
+                                   }
+                                   try {
+                                       if (typeof obj[k] === 'function') {
+                                           tmp[k] = obj[k].toString()
+                                           continue
+                                       }
+                                       if (typeof obj[k] === 'object') {
+                                           tmp[k] = ___dump(obj[k], _d + 1);
+                                           continue
+                                       }
+                                   } catch (e) {}
+                                   try {
+                                       tmp[k] = JSON.stringify(obj[k])
+                                       continue
+                                   } catch (e) {
+                                   }
+                                   try {
+                                       tmp[k] = obj[k].toString();
+                                       continue
+                                   } catch (e) {}
+                               }
+                               return tmp
+                           }
+                           function ___dumpY(obj) {
+                                    if(obj === null || obj === undefined){
+                                        return null
+                                    }
+                                   let _typesB = ['number', 'string', 'boolean'];
+                                   if (_typesB.includes(typeof obj)) {
+                                       return obj
+                                   }                           
+                               var objKeys = (obj) => {
+                                   var [target, result] = [obj, []];
+                                   while (target !== null) {
+                                       result = result.concat(Object.getOwnPropertyNames(target));
+                                       target = Object.getPrototypeOf(target);
+                                   }
+                                   return result;
+                               }
+                               return Object.fromEntries(
+                                   objKeys(obj).map(_ => [_, ___dump(obj[_])]))
+                           }
+                           return ___dumpY( %s )
+                   """
+            % obj_name
+        )
+        
+        return js_code_a
+
+def wait_for_result(find_func, timeout: Union[int, float] = 10, *args, **kwargs):
+        """
+        Helper method to implement timeout functionality for find operations
+        
+        :param find_func: Function that performs the find operation
+        :param timeout: Number of seconds to wait before timing out
+        :param args: Positional arguments to pass to find_func
+        :param kwargs: Keyword arguments to pass to find_func
+        :return: Result from find_func or None if timeout occurs
+        """
+        now = time.time()
+        result = find_func(*args, **kwargs)
+        
+        if timeout:
+            while not result:
+                result = find_func(*args, **kwargs)
+                if time.time() - now > timeout:
+                    return None
+                time.sleep(0.5)
+        return result

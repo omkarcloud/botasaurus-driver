@@ -22,7 +22,7 @@ def isbanned(node):
         return node.node_name.lower() in bannedtextsearchresults
 
 def issametype(node, type):
-        return node.node_name.lower() ==type
+        return node.node_name.lower() == type
 def append_safe(results, elem, text, exact_match):
             if exact_match:
                 if text == elem.text:
@@ -30,7 +30,7 @@ def append_safe(results, elem, text, exact_match):
             else:
                 results.append(elem)
               
-def make_core_string(SCRIPT,args ):
+def make_core_string(SCRIPT, args):
             expression = r"const args = JSON.parse('ARGS'); SCRIPT".replace("SCRIPT", SCRIPT)
             if args is not None:
                 expression = expression.replace("ARGS",  json.dumps(args).replace(r'\"', r'\\"'))
@@ -140,11 +140,11 @@ class Tab(Connection):
     _download_behavior: List[str] = None
 
     def __init__(
-        self,
-        websocket_url: str,
-        target: cdp.target.TargetInfo,
-        browser= None,
-        **kwargs,
+            self,
+            websocket_url: str,
+            target: cdp.target.TargetInfo,
+            browser=None,
+            **kwargs,
     ):
         super().__init__(websocket_url, target, browser, **kwargs)
         self.browser = browser
@@ -333,6 +333,8 @@ class Tab(Connection):
 
         webbrowser.open(self.inspector_url)
 
+    
+
     def find(
         self,
         text: str,
@@ -374,20 +376,43 @@ class Tab(Connection):
         :param timeout: raise timeout exception when after this many seconds nothing is found.
         :type timeout: float,int
         """
-        now = time.time()
-
-        item = self.find_element_by_text(
-            text, best_match, return_enclosing_element, type=type, exact_match=exact_match
+        return util.wait_for_result(
+            self.find_element_by_text,
+            timeout,
+            text,
+            best_match,
+            return_enclosing_element,
+            type=type,
+            exact_match=exact_match
         )
-        if timeout:
-            while not item:
-                item = self.find_element_by_text(
-                    text, best_match, return_enclosing_element, type=type, exact_match=exact_match
-                )
-                if time.time() - now > timeout:
-                    return None
-                self.sleep(0.5)
-        return item
+    
+    def find_iframe(
+        self,
+        text: str,
+        iframe_elem: element.Element,
+        timeout: Union[int, float] = 10,
+        type=None,
+        exact_match = False,
+    ):
+        """
+        Find single element by text within an iframe
+        Can also be used to wait for such element to appear.
+
+        :param text: Text to search for
+        :param iframe_elem: Iframe element to search within
+        :param timeout: Number of seconds to wait before timing out
+        :param type: Type of element to find
+        :param exact_match: Whether to match text exactly or partially
+        :return: First matching element or None if not found/timeout
+        """
+        return util.wait_for_result(
+            self.find_element_by_text_iframe,
+            timeout,
+            text,
+            iframe_elem,
+            type=type,
+            exact_match=exact_match
+        )    
 
     def select(
         self,
@@ -406,16 +431,12 @@ class Tab(Connection):
         :type timeout: float,int
 
         """
-        now = time.time()
-
-        item = self.query_selector(selector, _node)
-        if timeout:
-            while not item:
-                item = self.query_selector(selector, _node)
-                if time.time() - now > timeout:
-                    return None
-                self.sleep(0.5)
-        return item
+        return util.wait_for_result(
+        self.query_selector,
+        timeout,
+        selector,
+        _node
+    )
 
     def click_at_point(self, x: int, y:int):
             self.send(
@@ -462,15 +483,12 @@ class Tab(Connection):
         return element.create(node, self, doc)
 
     def get_element_at_point(self,x: int, y:int, timeout: Optional[int] = None):
-        now = time.time()
-        results = self.perform_get_element_at_point(x,y)
-        if timeout:
-            while not results:
-                results = self.perform_get_element_at_point(x,y)
-                if time.time() - now > timeout:
-                    return results
-                self.sleep(0.5)
-        return results
+        return util.wait_for_result(
+        self.perform_get_element_at_point,
+        timeout,
+        x,
+        y
+    )
 
     def find_all(
         self,
@@ -489,23 +507,47 @@ class Tab(Connection):
         :param timeout: raise timeout exception when after this many seconds nothing is found.
         :type timeout: float,int
         """
-        now = time.time()
+        return util.wait_for_result(
+        self.find_elements_by_text,
+        timeout,
+        text,
+        type=type,
+        exact_match=exact_match
+    ) or []
+    def find_all_iframe(
+        self,
+        text: str,
+        iframe_elem: element.Element,
+        timeout: Union[int, float] = 10,
+        type=None,
+        exact_match = False,
+    ):
+        """
+        Find multiple elements by text within an iframe
+        Can also be used to wait for such elements to appear.
 
-        results = self.find_elements_by_text(text, type=type, exact_match=exact_match)
-        if timeout:
-            while not results:
-                results = self.find_elements_by_text(text, type=type, exact_match=exact_match)
-                if time.time() - now > timeout:
-                    return []
-                self.sleep(0.5)
-        return results
+        :param text: Text to search for
+        :param iframe_elem: Iframe element to search within
+        :param timeout: Number of seconds to wait before timing out
+        :param type: Type of elements to find
+        :param exact_match: Whether to match text exactly or partially
+        :return: List of matching elements or empty list if not found/timeout
+        """
+        return util.wait_for_result(
+            self.find_elements_by_text_iframe,
+            timeout,
+            text,
+            iframe_elem,
+            type=type,
+            exact_match=exact_match
+        ) or []    
+    
     def select_all(
         self,
         selector: str,
         timeout: Union[int, float] = 10,
         node_name = None,
         _node: Optional[Union[cdp.dom.Node, element.Element]] = None,
-        include_frames=False
         
     ):
         """
@@ -518,25 +560,17 @@ class Tab(Connection):
         :type timeout: float,int
         """
 
-        now = time.time()
-        results = self.query_selector_all(selector, _node)
-        if include_frames:
-            frames = self.query_selector_all("iframe")
-            # unfortunately, asyncio.gather here is not an option
-            for fr in frames:
-                results.extend(fr.query_selector_all(selector))
-
-        if timeout:
-            while not results:
-                results = self.query_selector_all(selector, _node)
-                if time.time() - now > timeout:
-                    return results
-                self.sleep(0.5)
+        results = util.wait_for_result(
+            self.query_selector_all,
+            timeout,
+            selector,
+            _node
+        )
+        
         if not results:
             return []
-        results = [item for item in results if item.node.node_name.lower() == node_name.lower()] if node_name else results
-
-        return results
+            
+        return [item for item in results if item.node.node_name.lower() == node_name.lower()] if node_name else results
 
     def count_select(
         self,
@@ -556,17 +590,12 @@ class Tab(Connection):
         :type timeout: float,int
         """
 
-        now = time.time()
-        results = self.query_selector_count(selector, _node)
-        if timeout:
-            while not results:
-                results = self.query_selector_count(selector, _node)
-                if time.time() - now > timeout:
-                    return 0
-                self.sleep(0.5)
-        if not results:
-            return 0
-        return results
+        return util.wait_for_result(
+        self.query_selector_count,
+        timeout,
+        selector,
+        _node
+    ) or 0
 
     def query_selector_all(
         self,
@@ -750,6 +779,63 @@ class Tab(Connection):
             return
         return element.create(node, self, doc)
 
+        
+    def find_element_by_text(
+        self,
+        text: str,
+        best_match: Optional[bool] = False,
+        return_enclosing_element: Optional[bool] = True,
+        type=None,
+        exact_match= False,
+    ) -> Union[element.Element, None]:
+        """
+        finds and returns the first element containing <text>, or best match
+
+        :param text:
+        :type text:
+        :param best_match:  when True, which is MUCH more expensive (thus much slower),
+                            will find the closest match based on length.
+                            this could help tremendously, when for example you search for "login", you'd probably want the login button element,
+                            and not thousands of scripts,meta,headings containing a string of "login".
+
+        :type best_match: bool
+        :param return_enclosing_element:
+        :type return_enclosing_element:
+        :return:
+        :rtype:
+        """
+        doc = self.send(cdp.dom.get_document(-1, True))
+        search_id, nresult = self.send(cdp.dom.perform_search(text, True))
+        # Not Found, Exit
+        if nresult:
+            node_ids = self.send(cdp.dom.get_search_results(search_id, 0, nresult))
+        else:
+            node_ids = []
+
+        self.send(cdp.dom.discard_search_results(search_id))
+
+        if not node_ids:
+            return None  # Fix: Return None if no nodes are found
+
+        results = []
+        for nid in node_ids:
+            # Added as just need this this nullifies best match
+            if results:
+                return results[0]
+
+            node = util.filter_recurse(doc, lambda n: n.node_id == nid)
+            try:
+                elem = element.create(node, self, doc)
+            except:  # noqa
+                continue
+            self.checktextnodeandappend(type, results, elem, text, exact_match)   
+            if results:
+                self.send(cdp.dom.disable())
+                return results[0]
+        
+        self.send(cdp.dom.disable())
+        return None  # Fix: Return None if no results are found
+
     def find_elements_by_text(
         self,
         text: str,
@@ -796,31 +882,50 @@ class Tab(Connection):
                 continue
             self.checktextnodeandappend(type, results, elem, text, exact_match)  
 
-        # since we already fetched the entire doc, including shadow and frames
-        # let's also search through the iframes
-        # iframes = util.filter_recurse_all(doc, lambda node: node.node_name == "IFRAME")
-        # if iframes:
-            # iframes_elems = [
-            #     element.create(iframe, self, iframe.content_document)
-            #     for iframe in iframes
-            # ]
-            # for iframe_elem in iframes_elems:
-            #     if iframe_elem.content_document:
-            #         iframe_text_nodes = util.filter_recurse_all(
-            #             iframe_elem,
-            #             lambda node: node.node_type == 3  # noqa
-            #             and text.lower() in node.node_value.lower(),
-            #         )
-            #         if iframe_text_nodes:
-            #             iframe_text_elems = [
-            #                 element.create(text_node, self, iframe_elem.tree)
-            #                 for text_node in iframe_text_nodes
-            #             ]
-            #             results.extend(
-                        #     text_node.parent for text_node in iframe_text_elems
-                        # )
         self.send(cdp.dom.disable())
-        return results or []
+        return results  # Fix: Return results directly
+    
+    def _find_text_nodes_in_iframe(self, text, iframe_elem, type, exact_match, single_result=False):
+        """
+        Common method to find text nodes in an iframe and process them.
+        """
+        results = []
+        if iframe_elem.content_document:
+            iframe_text_nodes = util.filter_recurse_all(
+                iframe_elem,
+                lambda node: node.node_type == 3  # noqa
+                and text.lower() in node.node_value.lower(),
+            )
+            if iframe_text_nodes:
+                for text_node in iframe_text_nodes:
+                    elem = element.create(text_node, self, iframe_elem.tree)
+                    self.checktextnodeandappend(type, results, elem, text, exact_match)
+                    if single_result and results:
+                        self.send(cdp.dom.disable())
+                        return results[0]  # Return first match immediately if requested
+
+        self.send(cdp.dom.disable())
+        return results if not single_result else None
+
+    def find_elements_by_text_iframe(
+        self,
+        text: str,
+        iframe_elem: element.Element,
+        tag_hint: Optional[str] = None,
+        type=None,
+        exact_match=False,
+    ) -> List[element.Element]:
+        return self._find_text_nodes_in_iframe(text, iframe_elem, type, exact_match)
+
+    def find_element_by_text_iframe(
+        self,
+        text: str,
+        iframe_elem: element.Element,
+        tag_hint: Optional[str] = None,
+        type=None,
+        exact_match=False,
+    ) -> Optional[element.Element]:
+        return self._find_text_nodes_in_iframe(text, iframe_elem, type, exact_match, single_result=True)
 
     def run_cdp_command(self, command):
         return self.send(command)
@@ -858,88 +963,9 @@ class Tab(Connection):
                 script_to_evaluate_on_load=script_to_evaluate_on_load,
             ),
         )
-    def find_element_by_text(
-        self,
-        text: str,
-        best_match: Optional[bool] = False,
-        return_enclosing_element: Optional[bool] = True,
-        type=None,
-        exact_match= False,
-    ) -> Union[element.Element, None]:
-        """
-        finds and returns the first element containing <text>, or best match
 
-        :param text:
-        :type text:
-        :param best_match:  when True, which is MUCH more expensive (thus much slower),
-                            will find the closest match based on length.
-                            this could help tremendously, when for example you search for "login", you'd probably want the login button element,
-                            and not thousands of scripts,meta,headings containing a string of "login".
-
-        :type best_match: bool
-        :param return_enclosing_element:
-        :type return_enclosing_element:
-        :return:
-        :rtype:
-        """
-        doc = self.send(cdp.dom.get_document(-1, True))
-        search_id, nresult = self.send(cdp.dom.perform_search(text, True))
-        # Not Found, Exit
-        if nresult:
-            node_ids = self.send(cdp.dom.get_search_results(search_id, 0, nresult))
-        else:
-            node_ids = []
-
-        self.send(cdp.dom.discard_search_results(search_id))
-
-        if not node_ids:
-            node_ids = []
-        results = []
-        for nid in node_ids:
-            # Added as just need this this nullifies best match
-            if results:
-              return results[0]
-
-            node = util.filter_recurse(doc, lambda n: n.node_id == nid)
-            try:
-                elem = element.create(node, self, doc)
-            except:  # noqa
-                continue
-            self.checktextnodeandappend(type, results, elem, text, exact_match)   
-
-        # since we already fetched the entire doc, including shadow and frames
-        # let's also search through the iframes
-        # iframes = util.filter_recurse_all(doc, lambda node: node.node_name == "IFRAME")
-        # if iframes:
-        #     iframes_elems = [
-        #         element.create(iframe, self, iframe.content_document)
-        #         for iframe in iframes
-        #     ]
-        #     for iframe_elem in iframes_elems:
-                # iframe_text_nodes = util.filter_recurse_all(
-                #     iframe_elem,
-                #     lambda node: node.node_type == 3  # noqa
-                #     and text.lower() in node.node_value.lower(),
-                # )
-                # if iframe_text_nodes:
-                #     iframe_text_elems = [
-                #         element.create(text_node, self, iframe_elem.tree)
-                #         for text_node in iframe_text_nodes
-                #     ]
-                #     results.extend(text_node.parent for text_node in iframe_text_elems)
-        try:
-            if not results:
-                return
-                # naively just return the first result
-            for elem in results:
-                if elem:
-                    return elem
-        finally:
-            self.send(cdp.dom.disable())
 
     def checktextnodeandappend(self, type, results, elem, text, exact_match):
-        
-
         if elem.node_type == 3:
                 # if found element is a text node (which is plain text, and useless for our purpose),
                 # we return the parent element of the node (which is often a tag which can have text between their
@@ -1043,142 +1069,10 @@ if (resp instanceof Promise) {
             ]...
             '
         """
-        js_code_a = (
-            """
-                           function ___dump(obj, _d = 0) {
-                               let _typesA = ['object', 'function'];
-                               let _typesB = ['number', 'string', 'boolean'];
-                               if (_d == 2) {
-                                   console.log('maxdepth reached for ', obj);
-                                   return
-                               }
-                               let tmp = {}
-                               for (let k in obj) {
-                                   if (obj[k] == window) continue;
-                                   let v;
-                                   try {
-                                       if (obj[k] === null || obj[k] === undefined || obj[k] === NaN) {
-                                           console.log('obj[k] is null or undefined or Nan', k, '=>', obj[k])
-                                           tmp[k] = obj[k];
-                                           continue
-                                       }
-                                   } catch (e) {
-                                       tmp[k] = null;
-                                       continue
-                                   }
-
-
-                                   if (_typesB.includes(typeof obj[k])) {
-                                       tmp[k] = obj[k]
-                                       continue
-                                   }
-
-                                   try {
-                                       if (typeof obj[k] === 'function') {
-                                           tmp[k] = obj[k].toString()
-                                           continue
-                                       }
-
-
-                                       if (typeof obj[k] === 'object') {
-                                           tmp[k] = ___dump(obj[k], _d + 1);
-                                           continue
-                                       }
-
-
-                                   } catch (e) {}
-
-                                   try {
-                                       tmp[k] = JSON.stringify(obj[k])
-                                       continue
-                                   } catch (e) {
-
-                                   }
-                                   try {
-                                       tmp[k] = obj[k].toString();
-                                       continue
-                                   } catch (e) {}
-                               }
-                               return tmp
-                           }
-
-                           function ___dumpY(obj) {
-                               var objKeys = (obj) => {
-                                   var [target, result] = [obj, []];
-                                   while (target !== null) {
-                                       result = result.concat(Object.getOwnPropertyNames(target));
-                                       target = Object.getPrototypeOf(target);
-                                   }
-                                   return result;
-                               }
-                               return Object.fromEntries(
-                                   objKeys(obj).map(_ => [_, ___dump(obj[_])]))
-
-                           }
-                           ___dumpY( %s )
-                   """
-            % obj_name
-        )
-        js_code_b = (
-            """
-            ((obj, visited = new WeakSet()) => {
-                 if (visited.has(obj)) {
-                     return {}
-                 }
-                 visited.add(obj)
-                 var result = {}, _tmp;
-                 for (var i in obj) {
-                         try {
-                             if (i === 'enabledPlugin' || typeof obj[i] === 'function') {
-                                 continue;
-                             } else if (typeof obj[i] === 'object') {
-                                 _tmp = recurse(obj[i], visited);
-                                 if (Object.keys(_tmp).length) {
-                                     result[i] = _tmp;
-                                 }
-                             } else {
-                                 result[i] = obj[i];
-                             }
-                         } catch (error) {
-                             // console.error('Error:', error);
-                         }
-                     }
-                return result;
-            })(%s)
-        """
-            % obj_name
-        )
-
+        js_code_a = util.get_jscode(obj_name)
         # we're purposely not calling self.evaluate here to prevent infinite loop on certain expressions
-
-        remote_object, exception_details = self.send(
-            cdp.runtime.evaluate(
-                js_code_a,
-                await_promise=True,
-                return_by_value=return_by_value,
-                allow_unsafe_eval_blocked_by_csp=True,
-            )
-        )
-        if exception_details:
-
-            # try second variant
-
-            remote_object, exception_details = self.send(
-                cdp.runtime.evaluate(
-                    js_code_b,
-                    await_promise=True,
-                    return_by_value=return_by_value,
-                    allow_unsafe_eval_blocked_by_csp=True,
-                )
-            )
-
-        if exception_details:
-            raise JavascriptException(exception_details)
-        if return_by_value:
-            if remote_object.value:
-                return remote_object.value
-        else:
-            return remote_object, exception_details
+        return self.evaluate(js_code_a, None, True,return_by_value )
+     
 
     def close(self):
         """
@@ -1200,7 +1094,7 @@ if (resp instanceof Promise) {
         :rtype:
         """
         window_id, bounds = self.send(
-            cdp.browser.get_window_for_target(self.target_id)
+            cdp.browser.get_window_for_target(self.target.target_id)
         )
         return window_id, bounds
     def get_content(self):
@@ -1429,7 +1323,7 @@ if (resp instanceof Promise) {
                     raise ElementWithSelectorNotFoundException(text)
                 self.sleep(0.5)
             return item
-    def download_file(self, url: str, filename: Optional[PathLike] = None):
+    def download_file(self, url: str, filename: Optional[PathLike] = None, _node = None):
         """
         downloads file by given url.
 
@@ -1467,7 +1361,7 @@ if (resp instanceof Promise) {
             }
             """.replace('__URL', url).replace('__FILENAME', filename)
       
-        body = (self.query_selector_all("body"))[0]
+        body = self.query_selector("body", _node)
         body.update()
         self.send(
             cdp.runtime.call_function_on(
@@ -1903,19 +1797,19 @@ if (resp instanceof Promise) {
         except (AttributeError, TypeError):
             return False
 
-    def __getattr__(self, item):
-        try:
-            return getattr(self._target, item)
-        except AttributeError:
-            raise AttributeError(
-                f'"{self.__class__.__name__}" has no attribute "%s"' % item
-            )
+    # def __getattr__(self, item):
+    #     try:
+    #         return getattr(self._target, item)
+    #     except AttributeError:
+    #         raise AttributeError(
+    #             f'"{self.__class__.__name__}" has no attribute "%s"' % item
+    #         )
     def __repr__(self):
         if self.target.url:
             extra = f"[url: {self.target.url}]"
-            s = f"<{type(self).__name__} [{self.target_id}] [{self.type_}] {extra}>"
+            s = f"<{type(self).__name__} [{self.target.target_id}] [{self.target.type_}] {extra}>"
         else: 
-            s = f"<{type(self).__name__} [{self.target_id}] [{self.type_}]>"
+            s = f"<{type(self).__name__} [{self.target.target_id}] [{self.target.type_}]>"
         return s
 
 class Frame(cdp.page.Frame):

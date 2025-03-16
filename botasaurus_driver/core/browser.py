@@ -150,14 +150,14 @@ class Browser:
     @property
     def main_tab(self) -> tab.Tab:
         """returns the target which was launched with the browser"""
-        return sorted(self.targets, key=lambda x: x.type_ == "page", reverse=True)[0]
+        return sorted(self.targets, key=lambda x: x._target.type_ == "page", reverse=True)[0]
 
     @property
     def tabs(self) -> List[tab.Tab]:
         """returns the current targets which are of type "page"
         :return:
         """
-        tabs = filter(lambda item: item.type_ == "page", self.targets)
+        tabs = filter(lambda item: item._target.type_ == "page", self.targets)
         return list(tabs)
 
     @property
@@ -281,7 +281,7 @@ class Browser:
             # get the connection matching the new target_id from our inventory
             connection:Connection = next(
                 filter(
-                    lambda item: item.type_ == "page" and item.target_id == target_id,
+                    lambda item: item._target.type_ == "page" and item.target_id == target_id,
                     self.targets,
                 )
             )
@@ -300,7 +300,7 @@ class Browser:
         return connection
 
     def get_first_tab(self):
-        return next(filter(lambda item: item.type_ == "page", self.targets))
+        return next(filter(lambda item: item._target.type_ == "page", self.targets))
 
     def start(self=None) -> Browser:
 
