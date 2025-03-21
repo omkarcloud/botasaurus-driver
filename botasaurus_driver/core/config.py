@@ -206,6 +206,7 @@ class Config:
         # other keyword args will be accessible by attribute
         super().__init__()
         self.default_arguments = [
+            "--start-maximized",
             "--remote-allow-origins=*",
             "--no-first-run",
             "--no-service-autorun",

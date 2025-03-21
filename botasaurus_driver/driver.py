@@ -38,15 +38,30 @@ from .opponent import Opponent
 from .solve_cloudflare_captcha import bypass_if_detected, wait_till_document_is_ready
 from .core.browser import Browser
 from .core.util import start
-from .core.tab import Tab
+from .core.tab import Tab, make_iife
 from .core.element import Element as CoreElement
 
 
+
+def read_file(path):
+    with open(path, 'r', encoding="utf-8") as fp:
+        content = fp.read()
+        return content
+    
+def load_script_if_js_file(script):
+    if script is None:
+        return None
+    elif script.endswith(".js"):
+        return read_file(script)
+    else:
+        return script
+    
 class Wait:
     SHORT = 4
     LONG = 8
     VERY_LONG = 16
 
+    
 def make_element(driver, current_tab, internal_elem):
     if not internal_elem:
         return None
@@ -154,12 +169,21 @@ class Element:
     def get_shadow_root(self, wait: Optional[int] = Wait.SHORT):
         def has_height():
             rect = self.get_bounding_rect()
-            return rect if rect.height > 0 else None
+            if rect.height > 0:
+                return rect
+            # Let it load
+            sleep(0.75)
+            return  None
         rect = wait_for_result(has_height, max(wait, Wait.LONG))
         if rect is None:
             raise DriverException("Shadow root cannot be found because the element has no height.")
-        elem = self._tab.get_element_at_point(rect.x, rect.y, wait)
-        return make_element(self._driver, self._tab, elem) if elem else None
+
+        try:
+            elem = self._tab.get_element_at_point(rect.x, rect.y, wait)
+            return make_element(self._driver, self._tab, elem) if elem else None
+        except:
+          return make_element(self._driver,self._tab,  self._elem.first_shadow_root)
+          
 
     def select(self, selector: str, wait: Optional[int] = Wait.SHORT) -> "Element":
         elem = self._elem.query_selector(selector, wait)
@@ -510,6 +534,7 @@ class Element:
         return self._elem.__repr__()
 
     def run_js(self, script: str, args: Optional[any]=None) -> Any:
+        script = load_script_if_js_file(script)
         self._elem.raise_if_disconnected()
 
         try:
@@ -572,14 +597,17 @@ class BrowserTab:
         self.native_fetch_name = rand
 
     def run_js(self, script: str, args: Optional[any]=None) -> Any:
+        script = load_script_if_js_file(script)
         # We will automatically run the script in an Immediately Invoked Function Expression (IIFE)
         return self._tab.evaluate(script,args=args,await_promise=True)
 
     def run_on_new_document(
         self, script
     ) -> None:
-        self.run_cdp_command(cdp.page.enable())
-        return self.run_cdp_command(cdp.page.add_script_to_evaluate_on_new_document(script))
+        if script:
+            self.run_cdp_command(cdp.page.enable())
+            
+            return self.run_cdp_command(cdp.page.add_script_to_evaluate_on_new_document(make_iife(load_script_if_js_file(script))))
 
     def run_cdp_command(self, command) -> Any:
         return self._tab.run_cdp_command(command)
@@ -1879,93 +1907,99 @@ class Driver(BrowserTab):
         else:
             raise InvalidProfileException()
         
+    def get(self, link: str, bypass_cloudflare=False, js_to_run_before_new_document: str = None, wait: Optional[int] = None,  timeout=30) -> Tab:
+            self.run_on_new_document(js_to_run_before_new_document)
+            self._tab = self._browser.get(link, )
+            self.sleep(wait)
+            wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load, timeout=timeout)
+            if bypass_cloudflare:
+                self.detect_and_bypass_cloudflare()
+            return self._tab
 
-    def get(self, link: str, bypass_cloudflare=False, wait: Optional[int] = None, timeout=30) -> Tab:
-        self._tab = self._browser.get(link)
-        self.sleep(wait)
-        wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load, timeout=timeout)
-        if bypass_cloudflare:
-            self.detect_and_bypass_cloudflare()
-        return self._tab
-
-    def open_link_in_new_tab(self, link: str, bypass_cloudflare=False, wait: Optional[int] = None, timeout=30) -> Tab:
-        self._tab = self._browser.get(link, new_tab=True)
-        self.sleep(wait)
-        wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load, timeout=timeout)
-        if bypass_cloudflare:
-            self.detect_and_bypass_cloudflare()
-        return self._tab
-    
+    def open_link_in_new_tab(self, link: str, bypass_cloudflare=False, js_to_run_before_new_document: str = None, wait: Optional[int] = None,  timeout=30) -> Tab:
+            self.run_on_new_document(js_to_run_before_new_document)
+            self._tab = self._browser.get(link, new_tab=True, )
+            self.sleep(wait)
+            wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load, timeout=timeout)
+            if bypass_cloudflare:
+                self.detect_and_bypass_cloudflare()
+            return self._tab
 
     def get_via(
-        self,
-        link: str,
-        referer: str,
-        bypass_cloudflare=False,
-        wait: Optional[int] = None,
-        timeout=30,
-    ) -> Tab:
-        referer = referer.rstrip("/") + "/"
-        self._tab = self._browser.get(link, referrer=referer)
-        self.sleep(wait)
-        wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load, timeout=timeout)
+            self,
+            link: str,
+            referer: str,
+            bypass_cloudflare=False,
+            js_to_run_before_new_document: str = None,
+            wait: Optional[int] = None,
+            timeout=30,
+        ) -> Tab:
+            self.run_on_new_document(js_to_run_before_new_document)
+            referer = referer.rstrip("/") + "/"
+            self._tab = self._browser.get(link, referrer=referer, )
+            self.sleep(wait)
+            wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load, timeout=timeout)
 
-        if bypass_cloudflare:
-            self.detect_and_bypass_cloudflare()
-        return self._tab
+            if bypass_cloudflare:
+                self.detect_and_bypass_cloudflare()
+            return self._tab
 
     def google_get(
-        self,
-        link: str,
-        bypass_cloudflare=False,
-        wait: Optional[int] = None,
-        accept_google_cookies: bool = False,
-        timeout=30,
-    ) -> Tab:
-        if accept_google_cookies:
-            # No need to accept cookies multiple times
-            if (
-                hasattr(self, "has_accepted_google_cookies")
-                and self.has_accepted_google_cookies
-            ):
-                pass
-            else:
-                self.get("https://www.google.com/")
-                if '/sorry/' in self.current_url:
-                    print('Blocked by Google')
+            self,
+            link: str,
+            bypass_cloudflare=False,
+            js_to_run_before_new_document: str = None,
+            wait: Optional[int] = None,
+            accept_google_cookies: bool = False,
+            timeout=30,
+        ) -> Tab:
+            if accept_google_cookies:
+                # No need to accept cookies multiple times
+                if (
+                    hasattr(self, "has_accepted_google_cookies")
+                    and self.has_accepted_google_cookies
+                ):
+                    pass
                 else:
-                    perform_accept_google_cookies_action(self)
-                    self.has_accepted_google_cookies = True
-        self.get_via(
-            link,
-            "https://www.google.com/",
-            bypass_cloudflare=bypass_cloudflare,
-            wait=wait,
-            timeout=timeout,
-        )
-        return self._tab
+                    self.get("https://www.google.com/", js_to_run_before_new_document=js_to_run_before_new_document)
+                    if '/sorry/' in self.current_url:
+                        print('Blocked by Google')
+                    else:
+                        perform_accept_google_cookies_action(self)
+                        self.has_accepted_google_cookies = True
+            self.get_via(
+                link,
+                "https://www.google.com/",
+                bypass_cloudflare=bypass_cloudflare,
+                wait=wait,
+                js_to_run_before_new_document=js_to_run_before_new_document,
+                timeout=timeout,
+            )
+            return self._tab
 
     def get_via_this_page(
-        self, link: str, bypass_cloudflare=False, wait: Optional[int] = None, timeout=30
-    ) -> Tab:
-        currenturl = self.current_url
-        self.run_js(f'window.location.href = "{link}";')
-        if currenturl != link:
-            while True:
-                if currenturl != self.current_url:
-                    break
-                time.sleep(0.1)
-        self.sleep(wait)
+            self, link: str, bypass_cloudflare=False, js_to_run_before_new_document: str = None, wait: Optional[int] = None,  timeout=30
+        ) -> Tab:
+            
+            self.run_on_new_document(js_to_run_before_new_document)
+            currenturl = self.current_url
+            self.run_js(f'window.location.href = "{link}";')
+            if currenturl != link:
+                while True:
+                    if currenturl != self.current_url:
+                        break
+                    time.sleep(0.1)
+            self.sleep(wait)
 
-        wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load, timeout=timeout)
+            wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load, timeout=timeout)
 
-        if bypass_cloudflare:
-            self.detect_and_bypass_cloudflare()
+            if bypass_cloudflare:
+                self.detect_and_bypass_cloudflare()
 
-        return self._tab
-
-    def reload(self) -> Tab:
-        self._tab.reload()
+            return self._tab
+    def reload(self, js_to_run_before_new_document=None) -> Tab:
+        print(make_iife(load_script_if_js_file(js_to_run_before_new_document)))
+        self._tab.reload(script_to_evaluate_on_load=make_iife(load_script_if_js_file(js_to_run_before_new_document)))
         wait_till_document_is_ready(self._tab, self.config.wait_for_complete_page_load)
         return self._tab
 

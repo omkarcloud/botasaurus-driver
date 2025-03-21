@@ -6,7 +6,7 @@ import typing
 from datetime import datetime
 from typing import List, Union, Optional
 
-from ..exceptions import handle_exception, ReferenceError, SyntaxError, ElementWithSelectorNotFoundException, DriverException, JavascriptException, ChromeException, InvalidFilenameException, JavascriptSyntaxException, ScreenshotException
+from ..exceptions import handle_exception, NoSuchElementExistsException, ReferenceError, SyntaxError, ElementWithSelectorNotFoundException, DriverException, JavascriptException, ChromeException, InvalidFilenameException, JavascriptSyntaxException, ScreenshotException
 from ..driver_utils import create_screenshot_filename, get_download_directory, get_download_filename
 
 from . import element
@@ -37,6 +37,12 @@ def make_core_string(SCRIPT, args):
             else:
                 expression = expression.replace("const args = JSON.parse('ARGS'); ", "")
             return expression             
+
+
+def make_iife(SCRIPT):
+  if SCRIPT is None:
+    return None
+  return r"""(() => { SCRIPT })()""".replace("SCRIPT", SCRIPT)
 
 class Tab(Connection):
     """
@@ -636,15 +642,13 @@ class Tab(Connection):
             is_no_node = "could not find node" in e.message.lower()
             if _node is not None:
                 if is_no_node:
-                    if getattr(_node, "__last", None):
-                        del _node.__last
-                        return []
+                    is_last = getattr(_node, "is_last")
+                    if is_last:
+                        raise NoSuchElementExistsException([])
                     # if supplied node is not found, the dom has changed since acquiring the element
                     # therefore we need to update our passed node and try again
                     _node.update()
-                    _node.__last = (
-                        True  # make sure this isn't turned into infinite loop
-                    )
+                    _node.is_last =  True  # make sure this isn't turned into infinite loop
                     return self.query_selector_all(selector, _node)
             else:
                 # TODO: Why, i guess removable maybe
@@ -703,15 +707,13 @@ class Tab(Connection):
             is_no_node = "could not find node" in e.message.lower()
             if _node is not None:
                 if is_no_node:
-                    if getattr(_node, "__last", None):
-                        del _node.__last
-                        return 0
+                    is_last = getattr(_node, "is_last")
+                    if is_last:
+                        raise NoSuchElementExistsException(0)
                     # if supplied node is not found, the dom has changed since acquiring the element
                     # therefore we need to update our passed node and try again
                     _node.update()
-                    _node.__last = (
-                        True  # make sure this isn't turned into infinite loop
-                    )
+                    _node.is_last =  True  # make sure this isn't turned into infinite loop
                     return self.query_selector_count(selector, _node)
             else:
                 # TODO: Why, i guess removable maybe
@@ -756,15 +758,13 @@ class Tab(Connection):
             is_no_node = "could not find node" in e.message.lower()
             if _node is not None:
                 if is_no_node:
-                    if getattr(_node, "__last", None):
-                        del _node.__last
-                        return []
+                    is_last = getattr(_node, "is_last")
+                    if is_last:
+                        raise NoSuchElementExistsException(None)
                     # if supplied node is not found, the dom has changed since acquiring the element
                     # therefore we need to update our passed node and try again
                     _node.update()
-                    _node.__last = (
-                        True  # make sure this isn't turned into infinite loop
-                    )
+                    _node.is_last =  True  # make sure this isn't turned into infinite loop
                     return self.query_selector(selector, _node)
             else:
                 self.send(cdp.dom.disable())

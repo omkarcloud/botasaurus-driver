@@ -64,6 +64,11 @@ class ElementInitializationException(DriverException):
     def __init__(self, message):
         super().__init__(message)  # Exception message for element initialization errors
 
+class NoSuchElementExistsException(DriverException):
+    def __init__(self, default_value=None):
+        self.default_value = default_value
+        super().__init__("Element does not exist in the DOM")
+
  
 class DetachedElementException(DriverException):
     def __init__(self):

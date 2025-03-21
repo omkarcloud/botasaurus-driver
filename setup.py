@@ -10,14 +10,14 @@ def get_description():
 
 setup(
     name="botasaurus_driver",
-    version='4.0.74',
+    version='4.0.75',
     description="Super Fast, Super Anti-Detect, and Super Intuitive Web Driver",
     long_description_content_type="text/markdown",
     long_description=get_description(),
     author="Chetan",
-    author_email="chetan@omkar.cloud",
+    author_email="53407137+Chetan11-dev@users.noreply.github.com",
     maintainer="Chetan",
-    maintainer_email="chetan@omkar.cloud",
+    maintainer_email="53407137+Chetan11-dev@users.noreply.github.com",
     license="MIT",
     python_requires=">=3.5",
     keywords=[

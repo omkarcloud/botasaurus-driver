@@ -5,7 +5,7 @@ import os
 import time
 import typing
 
-from ..exceptions import ChromeException, DetachedElementException, ElementInitializationException, ElementPositionException, ElementPositionNotFoundException, ElementScreenshotException, ElementWithSelectorNotFoundException, InvalidFilenameException
+from ..exceptions import ChromeException, DriverException, DetachedElementException, ElementInitializationException, ElementPositionException, ElementPositionNotFoundException, ElementScreenshotException, ElementWithSelectorNotFoundException, InvalidFilenameException
 from ..driver_utils import create_screenshot_filename, get_download_directory, get_download_filename
 
 from . import util
@@ -215,6 +215,18 @@ class Element:
             root = self.shadow_roots[0]
             if root.shadow_root_type == cdp.dom.ShadowRootType.OPEN_:
                 return [create(child, self.tab) for child in root.children]
+
+    @property
+    def first_shadow_root(self):
+        if self.shadow_roots:
+            root = self.shadow_roots[0]
+            if root.shadow_root_type == cdp.dom.ShadowRootType.OPEN_:
+                first_child = root.children[0]
+                # first_child.nod
+                el = create(first_child, self.tab, )
+                return el 
+            else:
+                raise DriverException("Unable to access Shadow Root because it is closed.")
 
     def __getattr__(self, item):
         # if attribute is not found on the element python object

@@ -4,7 +4,7 @@ import time
 import types
 import typing
 from typing import Optional, List, Set, Union, Callable
-from ..exceptions import JavascriptRuntimeException, handle_exception
+from ..exceptions import JavascriptRuntimeException, handle_exception, NoSuchElementExistsException
 
 from .element import Element
 if typing.TYPE_CHECKING:
@@ -277,13 +277,16 @@ def wait_for_result(find_func, timeout: Union[int, float] = 10, *args, **kwargs)
         :param kwargs: Keyword arguments to pass to find_func
         :return: Result from find_func or None if timeout occurs
         """
-        now = time.time()
-        result = find_func(*args, **kwargs)
-        
-        if timeout:
-            while not result:
-                result = find_func(*args, **kwargs)
-                if time.time() - now > timeout:
-                    return None
-                time.sleep(0.5)
-        return result
+        try:
+            now = time.time()
+            result = find_func(*args, **kwargs)
+            
+            if timeout:
+                while not result:
+                    result = find_func(*args, **kwargs)
+                    if time.time() - now > timeout:
+                        return None
+                    time.sleep(0.5)
+            return result
+        except NoSuchElementExistsException as e:
+          return e.default_value
