@@ -234,19 +234,14 @@ class Browser:
             current_tab.target = target_info
         elif isinstance(event, cdp.target.TargetCreated):
             target_info: cdp.target.TargetInfo = event.target_info
-            from .tab import Tab
+            
 
-            new_target = Tab(
-                (
-                    f"ws://{self.config.host}:{self.config.port}"
-                    f"/devtools/{target_info.type_ or 'page'}"  # all types are 'page' internally in chrome apparently
-                    f"/{target_info.target_id}"
-                ),
-                target=target_info,
-                browser=self,
-            )
-            # if target_info.type_ == 'page':
-            self.fix_browser(new_target)
+            new_target = self.make_tab(target_info)
+            
+            page_type = target_info.type_
+            if page_type in ["page"]:
+                # only fix pages because other type's like iframe causes blocking of websockets
+                self.fix_browser(new_target)
 
             self.targets.append(new_target)
 
@@ -256,6 +251,19 @@ class Browser:
             )
             current_tab.close_connections()
             self.targets.remove(current_tab)
+
+    def make_tab(self, target_info):
+        from .tab import Tab
+        return Tab(
+                (
+                    f"ws://{self.config.host}:{self.config.port}"
+                    f"/devtools/{target_info.type_ or 'page'}"  # all types are 'page' internally in chrome apparently
+                    f"/{target_info.target_id}"
+                ),
+                target=target_info,
+                browser=self,
+                add_handlers= target_info.type_ != 'background_page'
+            )
 
     def get(
         self,
@@ -332,7 +340,7 @@ class Browser:
         self.connection.handlers[cdp.target.TargetCrashed] = [
             self._handle_target_update
         ]
-        self.connection.send(cdp.target.set_discover_targets(discover=True), wait_for_response=True)
+        self.connection.send(cdp.target.set_discover_targets(discover=True), wait_for_response=False)
         # self.connection.wait_to_be_idle()
         self.update_targets()
         # await self

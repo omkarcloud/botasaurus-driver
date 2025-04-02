@@ -155,6 +155,13 @@ class Tab(Connection):
         super().__init__(websocket_url, target, browser, **kwargs)
         self.browser = browser
 
+        self.execution_contexts: typing.Dict[str, ExecutionContext] = {}
+        # self.execution_contexts: List[ExecutionContext] = []
+        self.frames: typing.Dict[str, Frame] = {}
+        self._dom = None
+        self._window_id = None
+
+
         self.add_handler(
             cdp.runtime.ExecutionContextCreated, self._execution_contexts_handler
         )
@@ -170,13 +177,6 @@ class Tab(Connection):
         self.add_handler(cdp.page.FrameStartedLoading, self._frame_handler)
         self.add_handler(cdp.page.FrameStoppedLoading, self._frame_handler)
 
-        self.execution_contexts: typing.Dict[str, ExecutionContext] = {}
-        # self.execution_contexts: List[ExecutionContext] = []
-        self.frames: typing.Dict[str, Frame] = {}
-        self._dom = None
-        self._window_id = None
-    def _run(self, coro):
-        return coro
     @property
     def frames_list(self) -> List[Frame]:
         return list(self.frames.values())

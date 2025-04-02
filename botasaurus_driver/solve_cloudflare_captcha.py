@@ -16,7 +16,7 @@ def wait_till_document_is_ready(tab, wait_for_complete_page_load, timeout = 60):
     while True:
         sleep(0.1)
         try:
-            response = tab._run(tab.evaluate(script, await_promise=False))
+            response = tab.evaluate(script, await_promise=False)
             if response:
                 break
         except Exception as e:

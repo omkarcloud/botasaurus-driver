@@ -142,19 +142,8 @@ class Connection:
         :return:
         :rtype:
         """
-        if isinstance(event_type_or_domain, types.ModuleType):
-            for name, obj in inspect.getmembers_static(event_type_or_domain):
-                if name.isupper():
-                    continue
-                if not name[0].isupper():
-                    continue
-                if type(obj) != type:
-                    continue
-                if inspect.isbuiltin(obj):
-                    continue
-                self.handlers[obj].append(handler)
-            return
         self.handlers[event_type_or_domain].append(handler)
+
     def open(self, **kw):
         """
         opens the websocket connection. should not be called manually by users
