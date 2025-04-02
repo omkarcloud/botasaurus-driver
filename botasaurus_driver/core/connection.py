@@ -16,8 +16,7 @@ from typing import (
 import websocket
 from queue import Queue, Empty
 from ..exceptions import ChromeException
-import types
-import inspect
+
 
 from . import util
 from .. import cdp
@@ -351,6 +350,7 @@ class Connection:
             # temp variable when we registered it or saw handlers for it.
             # items still present at this point are unused and need removal
             self.enabled_domains.remove(ed)
+
 
 class Listener:
     def __init__(self, connection: Connection, reconnect_ws):
