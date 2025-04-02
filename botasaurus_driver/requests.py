@@ -313,8 +313,8 @@ def calculate_number_of_workers(urls, parallel):
         return n
 
 def run_js_with_args(driver, fetchcode, args):
-        if driver.native_fetch_name:
-             fetchcode = fetchcode.replace("fetch(", driver.native_fetch_name + "(")
+        if driver._native_fetch_name:
+             fetchcode = fetchcode.replace("fetch(", driver._native_fetch_name + "(")
         else:
             # Not needed
             # print("To prevent custom fetch request detection, please call driver.prevent_fetch_spying() before visiting any page.")

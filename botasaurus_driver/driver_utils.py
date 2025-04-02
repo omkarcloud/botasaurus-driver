@@ -164,3 +164,27 @@ def create_video_filename(filename):
     if not filename.endswith(".mp4"):
         filename = filename + ".mp4"
     return filename
+
+
+def with_human_mode(driver, action):
+    """
+    Temporarily enables human mode while executing the given action
+    
+    Args:
+        driver: The driver instance
+        action: Lambda function containing the action to perform with human mode enabled
+    """
+    is_disabled = not driver.is_human_mode_enabled
+    driver.enable_human_mode()
+    try:
+        return action()
+    finally:
+        pass
+        if is_disabled:
+            driver.disable_human_mode()
+
+def click_restoring_human_behaviour(driver, checkbox):
+    with_human_mode(driver, lambda: checkbox.click())
+
+def click_point_restoring_human_behaviour(driver, x,y):
+    with_human_mode(driver, lambda: driver.click_at_point(x,y))

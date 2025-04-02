@@ -70,6 +70,11 @@ class NoSuchElementExistsException(DriverException):
         super().__init__("Element does not exist in the DOM")
 
  
+    
+class ShadowRootClosedException(DriverException):
+        def __init__(self, message="Unable to access Shadow Root because it is closed."):
+            super().__init__(message)
+
 class DetachedElementException(DriverException):
     def __init__(self):
         super().__init__("Element has been removed and currently not connected to DOM.")
@@ -166,6 +171,7 @@ class JavascriptRuntimeException(JavascriptException):
         exception_msg = f"{self.msg}"
         return exception_msg
     
+
 def handle_exception(core, exception):
         if exception.class_name == 'SyntaxError':
           raise SyntaxError(core)
