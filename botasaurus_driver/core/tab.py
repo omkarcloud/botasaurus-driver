@@ -468,8 +468,11 @@ class Tab(Connection):
             ))
     def perform_get_element_at_point(self,x: int, y:int, raiseError = False):
         doc: cdp.dom.Node = self.send(cdp.dom.get_document(-1, True))
-        # print(self.send(cdp.dom.get_node_for_location(x=x, y=y, include_user_agent_shadow_dom=False)))
         try:
+         # ciel it
+          import math
+          x = math.ceil(x)
+          y = math.ceil(y)
           bid, __, nid = self.send(cdp.dom.get_node_for_location(x=x, y=y, include_user_agent_shadow_dom=False))
         except ChromeException as e:
           if e.message and "No node found" in e.message:

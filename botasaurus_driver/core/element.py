@@ -5,7 +5,7 @@ import os
 import time
 import typing
 
-from ..exceptions import ChromeException, DriverException, DetachedElementException, ElementInitializationException, ElementPositionException, ElementPositionNotFoundException, ElementScreenshotException, ElementWithSelectorNotFoundException, InvalidFilenameException
+from ..exceptions import ShadowRootClosedException, ChromeException, DriverException, DetachedElementException, ElementInitializationException, ElementPositionException, ElementPositionNotFoundException, ElementScreenshotException, ElementWithSelectorNotFoundException, InvalidFilenameException
 from ..driver_utils import create_screenshot_filename, get_download_directory, get_download_filename
 
 from . import util
@@ -226,7 +226,7 @@ class Element:
                 el = create(first_child, self.tab, )
                 return el 
             else:
-                raise DriverException("Unable to access Shadow Root because it is closed.")
+                raise ShadowRootClosedException()
 
     def __getattr__(self, item):
         # if attribute is not found on the element python object
@@ -474,74 +474,6 @@ class Element:
             start_point, end_point, relative=relative, steps=steps
         )
 
-    def humane_click(self):
-        """
-        Click the element.
-
-        :return:
-        :rtype:
-        """
-        self.raise_if_disconnected()
-
-        center = self.get_position().center
-        # a bit off for better humaness
-        x = center[0] - 4
-        y = center[1] - 3
-        self._tab.send(
-            cdp.input_.dispatch_mouse_event("mouseMoved", x=x, y=y)
-        )
-        time.sleep(0.07)
-        self._tab.send(
-           cdp.input_.dispatch_mouse_event(
-            "mousePressed",
-            x=x,
-            y=y,
-            button=cdp.input_.MouseButton.LEFT,
-            click_count=1
-        )
-        )
-        time.sleep(0.09)
-        self._tab.send (cdp.input_.dispatch_mouse_event(
-            "mouseReleased",
-            x=x,
-            y=y,
-            button=cdp.input_.MouseButton.LEFT,
-            click_count=1
-        ))
-    def press_and_hold(self, wait):
-        """
-        Click the element.
-
-        :return:
-        :rtype:
-        """
-        self.raise_if_disconnected()
-
-        center = self.get_position().center
-        # a bit off for better humaness
-        x = center[0] - 33
-        y = center[1] - 20
-        self._tab.send(
-            cdp.input_.dispatch_mouse_event("mouseMoved", x=x, y=y)
-        )
-        time.sleep(0.07)
-        self._tab.send(
-           cdp.input_.dispatch_mouse_event(
-            "mousePressed",
-            x=x,
-            y=y,
-            button=cdp.input_.MouseButton.LEFT,
-            click_count=1
-        )
-        )
-        time.sleep(wait)
-        self._tab.send (cdp.input_.dispatch_mouse_event(
-            "mouseReleased",
-            x=x,
-            y=y,
-            button=cdp.input_.MouseButton.LEFT,
-            click_count=1
-        ))        
     def click(self):
         """
         Click the element.
@@ -689,7 +621,6 @@ class Element:
           raise
     def get_position(self, abs=False):
         self.raise_if_disconnected()
-
         if not self.parent or not self.object_id:
             self._remote_object = self._tab.send(
                 cdp.dom.resolve_node(backend_node_id=self.backend_node_id)
@@ -700,8 +631,21 @@ class Element:
                 cdp.dom.get_content_quads(object_id=self.remote_object.object_id)
             )
             if not quads:
-                raise ElementPositionNotFoundException(self)
-            pos = Position(quads[0])
+                coords = self.apply('(el)=>el.getBoundingClientRect()')
+                if not coords:
+                    raise ElementPositionNotFoundException(self)
+                pos = _Position([
+                    coords['left'],
+                    coords['top'],
+                    coords['right'],
+                    coords['top'],
+                    coords['right'],
+                    coords['bottom'],
+                    coords['left'],
+                    coords['bottom'],
+                ])
+            else:
+                pos = _Position(quads[0])
             if abs:
                 scroll_y = self.tab.evaluate("window.scrollY")
                 scroll_x = self.tab.evaluate("window.scrollX")
@@ -709,7 +653,7 @@ class Element:
                 abs_y = pos.top + scroll_y + (pos.height / 2)
                 pos.abs_x = abs_x
                 pos.abs_y = abs_y
-            return pos
+            return DictPosition(pos)
         except IndexError:
             pass    
     def mouse_click(
@@ -1025,7 +969,7 @@ class Element:
             "position:absolute;z-index:99999999;padding:0;margin:0;"
             "left:{:.1f}px; top: {:.1f}px;"
             "opacity:1;"
-            "width:16px;height:16px;border-radius:50%;background:red;"
+            "width:8px;height:8px;border-radius:50%;background:red;"
             "animation:show-pointer-ani {:.2f}s ease 1;"
         ).format(
             pos.center[0] - 8,  # -8 to account for drawn circle itself (w,h)
@@ -1051,7 +995,7 @@ class Element:
                         console.log(e)
                     }}
                 }};
-                var _d = document.createElement('div');
+                var _d = document.createElement('span');
                 _d.style = `{0:s}`;
                 _d.id = `{1:s}`;
                 document.body.insertAdjacentElement('afterBegin', _d);
@@ -1266,7 +1210,12 @@ class Element:
         # we're purposely not calling self.evaluate here to prevent infinite loop on certain expressions
         return self.apply(js_code_a, None,return_by_value )
      
-class Position(cdp.dom.Quad):
+def calc_center(rect):
+        return (
+            rect.left + (rect.width / 2),
+            rect.top + (rect.height / 2),
+        )     
+class _Position(cdp.dom.Quad):
     """helper class for element positioning"""
 
     def __init__(self, points):
@@ -1286,10 +1235,7 @@ class Position(cdp.dom.Quad):
         self.x = self.left
         self.y = self.top
         self.height, self.width = (self.bottom - self.top, self.right - self.left)
-        self.center = (
-            self.left + (self.width / 2),
-            self.top + (self.height / 2),
-        )
+        self.center = calc_center(self)
 
     def to_viewport(self, scale=1):
         return cdp.page.Viewport(
@@ -1298,3 +1244,61 @@ class Position(cdp.dom.Quad):
 
     def __repr__(self):
         return f"<Position(x={self.left}, y={self.top}, width={self.width}, height={self.height})>"
+
+class DictPosition(ContraDict):
+    def __init__(self, position: _Position):
+        self._position = position
+        if position:
+            self.left = position.left
+            self.top = position.top
+            self.right = position.right
+            self.bottom = position.bottom
+            
+            self.abs_x = position.abs_x
+            self.abs_y = position.abs_y
+            self.x = position.x
+            self.y = position.y
+
+            self.height = position.height
+            self.width = position.width
+            self.center = calc_center(self)
+        else:
+
+            self.left = 0
+            self.top = 0
+            self.right = 0
+            self.bottom = 0
+            
+            self.abs_x = 0
+            self.abs_y = 0
+            self.x = 0
+            self.y = 0
+
+            self.height = 0
+            self.width = 0
+            self.center = (0,0)
+            
+        super().__init__(self.to_dict())
+
+    
+    def to_dict(self):
+        return {
+            "left": self.left,
+            "top": self.top,
+            "right": self.right, 
+            "bottom": self.bottom,
+            "abs_x": self.abs_x,
+            "abs_y": self.abs_y,
+            "x": self.x,
+            "y": self.y,
+            "height": self.height,
+            "width": self.width,
+            "center": self.center
+        }
+
+
+    def to_viewport(self, scale=1):
+        return self._position.to_viewport(scale)
+
+    def __repr__(self):
+        return str(self.to_dict())
