@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import atexit
 import os
 from typing import List, Union
 
 import time
-import requests
+import urllib.request
+from urllib.error import URLError, HTTPError
 from .retry_on_error import retry_if_is_error
 from .profiles import delete_profile, get_target_folders, run_check_and_delete_in_thread
 from .. import cdp
@@ -45,10 +47,12 @@ def ensure_chrome_is_alive(url):
     retry_delay = 0.1
     while time.time() - start_time < duration:
         try:
-            response = requests.get(url, timeout=timeout)
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException:
+            req = urllib.request.Request(url)
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                if response.status == 200:
+                    data = response.read().decode('utf-8')
+                    return json.loads(data)
+        except (URLError, HTTPError) as e:
             time.sleep(retry_delay)  # Wait before retrying
             continue
 
@@ -241,8 +245,8 @@ class Browser:
                 target=target_info,
                 browser=self,
             )
-            if target_info.type_ == 'page':
-                self.fix_browser(new_target)
+            # if target_info.type_ == 'page':
+            self.fix_browser(new_target)
 
             self.targets.append(new_target)
 
@@ -328,7 +332,7 @@ class Browser:
         self.connection.handlers[cdp.target.TargetCrashed] = [
             self._handle_target_update
         ]
-        self.connection.send(cdp.target.set_discover_targets(discover=True))
+        self.connection.send(cdp.target.set_discover_targets(discover=True), wait_for_response=True)
         # self.connection.wait_to_be_idle()
         self.update_targets()
         # await self
@@ -346,11 +350,13 @@ class Browser:
         def run():
             process = subprocess.Popen(
                 [exe, *params],
+                stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 close_fds=is_posix,
             )
             chrome_url = f"http://{self.config.host}:{self.config.port}/json/version"
+            # time.sleep(0.5)
             try:
                 self.info = ensure_chrome_is_alive(chrome_url)
                 self._process = process

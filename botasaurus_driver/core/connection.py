@@ -261,7 +261,7 @@ class Connection:
         self.target = target_info
 
     def send(
-        self, cdp_obj: Generator[dict[str, Any], dict[str, Any], Any], _is_update=False
+        self, cdp_obj: Generator[dict[str, Any], dict[str, Any], Any], _is_update=False, wait_for_response=True
     ) -> Any:
         """
         send a protocol command. the commands are made using any of the cdp.<domain>.<method>()'s
@@ -278,9 +278,9 @@ class Connection:
         if not self.websocket or self.closed:
             return
         
-        return self.perform_send(cdp_obj, _is_update)
+        return self.perform_send(cdp_obj, _is_update, wait_for_response)
 
-    def perform_send(self, cdp_obj, _is_update=False):
+    def perform_send(self, cdp_obj, _is_update=False, wait_for_response=True):
         if not self.listener or not self.listener.running:
             self.listener = Listener(self, self.reconnect_websocket)
         
@@ -296,12 +296,12 @@ class Connection:
         #   print('faced websocket send exception', e)
           raise           
         
-        
-        MAX_WAIT = 200
-        result = wait_till_response_arrives(self.queue, tx_id , MAX_WAIT)
-        result = parse_response(result, cdp_obj)
+        if wait_for_response:
+            MAX_WAIT = 200
+            result = wait_till_response_arrives(self.queue, tx_id , MAX_WAIT)
+            result = parse_response(result, cdp_obj)
 
-        return result
+            return result
     def _register_handlers(self):
         """
         ensure that for current (event) handlers, the corresponding
@@ -337,7 +337,7 @@ class Connection:
                     # loop indefinite
                     self.enabled_domains.append(domain_mod)
 
-                    self.send(domain_mod.enable(), _is_update=True)
+                    self.send(domain_mod.enable(), _is_update=True, wait_for_response=False)
 
                 except:  # noqa - as broad as possible, we don't want an error before the "actual" request is sent
                     try:
@@ -456,8 +456,8 @@ class Listener:
                 # print("Connection closed")
                 pass
             def on_open(ws):
-                self.set_idle()
                 self.connected_event.set()
+                self.set_idle()
 
             ws.on_message = on_message
             ws.on_error = on_error
