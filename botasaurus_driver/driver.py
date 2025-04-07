@@ -245,10 +245,9 @@ class Element:
         rect = wait_for_result(has_height, max(wait, Wait.LONG))
         if rect is None:
             raise DriverException("Shadow root cannot be found because the element has no height.")
-
+        x = rect.x
+        y = rect.y
         try:
-            x = rect.x
-            y = rect.y
             elem = self._tab.get_element_at_point(x, y, wait)
             return self._make_element(elem) if elem else None
         except:
@@ -300,7 +299,7 @@ class Element:
     
     def click_at_point(self, x: int, y:int):
         if self._driver.is_human_mode_enabled:
-            with_human_mode(self._driver, lambda: self._driver._cursor.click(*self._get_x_y_with_iframe_offset(x,y)))
+            with_human_mode(self._driver, lambda: self._driver._cursor.click(self._get_x_y_with_iframe_offset(x,y)))
         else:
             self._tab.click_at_point(*self._get_x_y_with_iframe_offset(x,y))
 
@@ -907,7 +906,7 @@ class BrowserTab:
 
     def click_at_point(self, x: int, y:int):
         if self.is_human_mode_enabled: 
-            with_human_mode(self, lambda: self._get_driver()._cursor.click(*self._get_x_y_with_iframe_offset(x,y)))
+            with_human_mode(self, lambda: self._get_driver()._cursor.click(self._get_x_y_with_iframe_offset(x,y)))
         else:
             self._tab.click_at_point(*self._get_x_y_with_iframe_offset(x,y))
 
@@ -1430,6 +1429,7 @@ class IframeTab(BrowserTab):
         self.iframe_elem = iframe_elem
         # iframe_elem can be none if using get_iframe_by_link and iframe is in shadowroot, todo: figure out how to get iframe el or coords of a tab, this will fix _get_bounding_rect_with_iframe_offset which will be wrong if using get_iframe_by_link and iframe is in shadowroot
         super().__init__(config, _tab_value, _parent_tab, driver, _browser)
+        self.run_cdp_command(cdp.runtime.disable())
 
 
     def _make_element(self, elem):
@@ -2251,10 +2251,10 @@ class Driver(BrowserTab):
         sleep_for_n_seconds(n)
 
     def short_random_sleep(self) -> None:
-        sleep_for_n_seconds(uniform(2, 4))
+        sleep_for_n_seconds(round(uniform(2, 4), 2))
 
     def long_random_sleep(self) -> None:
-        sleep_for_n_seconds(uniform(6, 9))
+        sleep_for_n_seconds(round(uniform(6, 9), 2))
 
     def sleep_forever(self) -> None:
         sleep_forever()

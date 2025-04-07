@@ -194,7 +194,7 @@ class Browser:
                 connection.send(
                     cdp.network.set_user_agent_override(
                         user_agent=ua.replace("Headless", ""),
-                    )
+                    ), wait_for_response=False
                 )
         if self.config.block_images_and_css:
             connection.block_images_and_css()
@@ -303,6 +303,7 @@ class Browser:
             # first tab from browser.tabs
             connection = self.get_first_tab()
             # use the tab to navigate to new url
+            connection.send(cdp.runtime.disable())
             frame_id, _, *_ = connection.send(cdp.page.navigate(url, referrer=referrer))
             # update the frame_id on the tab
             connection.frame_id = frame_id
@@ -323,9 +324,6 @@ class Browser:
 
         self.create_chrome_with_retries(exe, params)
 
-        self._process_pid = self._process.pid
-        self.base_folder_name = get_folder_name_from_path(self.config.profile_directory)
-
         self.connection = Connection(self.info["webSocketDebuggerUrl"], _owner=self)
 
         self.connection.handlers[cdp.target.TargetInfoChanged] = [
@@ -340,9 +338,10 @@ class Browser:
         self.connection.handlers[cdp.target.TargetCrashed] = [
             self._handle_target_update
         ]
-        self.connection.send(cdp.target.set_discover_targets(discover=True), wait_for_response=False)
-        # self.connection.wait_to_be_idle()
-        self.update_targets()
+
+        self._process_pid = self._process.pid
+        self.base_folder_name = get_folder_name_from_path(self.config.profile_directory)
+
         # await self
         instances = util.get_registered_instances()
         instances.add(self)
@@ -353,6 +352,9 @@ class Browser:
         if fls:
             run_check_and_delete_in_thread(fls)
 
+        self.connection.send(cdp.target.set_discover_targets(discover=True), wait_for_response=False)
+        # self.connection.wait_to_be_idle()
+        self.update_targets()
     def create_chrome_with_retries(self, exe, params):
         @retry_if_is_error()
         def run():

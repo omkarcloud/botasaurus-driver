@@ -179,7 +179,6 @@ def with_human_mode(driver, action):
     try:
         return action()
     finally:
-        pass
         if is_disabled:
             driver.disable_human_mode()
 
