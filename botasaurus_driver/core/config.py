@@ -1,3 +1,4 @@
+import random
 import tempfile
 import os
 import gc
@@ -38,15 +39,20 @@ PathLike = str
 AUTO = None
 
 
-def free_port() -> int:
-    """Get free port."""
-    sock = socket.socket()
-    sock.bind(("localhost", 0))
-    port = sock.getsockname()[1]
-    sock.close()
-    del sock
-    gc.collect()
-    return port
+def free_port():
+    """Finds a random available port between 50000 and 54000"""
+    while True:
+        # using port's in these range avoid's bot detection datadome
+        port = random.randint(50000, 55000)
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as free_socket:
+            try:
+                free_socket.bind(('127.0.0.1', port))
+                free_socket.listen(5)
+                free_socket.close()
+                return port
+            except:
+                continue
+
 
 
 def clean_profile(profile):
@@ -137,6 +143,7 @@ class Config:
         wait_for_complete_page_load=False,
         extensions=[],
         arguments=[],
+        remove_default_browser_check_argument = False,
         user_agent=None,
         window_size=None,
         lang=None,
@@ -210,7 +217,8 @@ class Config:
             "--remote-allow-origins=*",
             "--no-first-run",
             "--no-service-autorun",
-            "--no-default-browser-check",
+            # Include `--no-default-browser-check` unless `remove_default_browser_check_argument` is True
+            *([] if remove_default_browser_check_argument else ["--no-default-browser-check"]),
             "--homepage=about:blank",
             "--no-pings",
             "--password-store=basic",
