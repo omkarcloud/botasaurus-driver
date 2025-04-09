@@ -161,21 +161,21 @@ class Tab(Connection):
         self._dom = None
         self._window_id = None
 
+        # removed to avoid runtime detection
+        # self.add_handler(
+        #     cdp.runtime.ExecutionContextCreated, self._execution_contexts_handler
+        # )
+        # self.add_handler(
+        #     cdp.runtime.ExecutionContextDestroyed, self._execution_contexts_handler
+        # )
+        # self.add_handler(
+        #     cdp.runtime.ExecutionContextsCleared, self._execution_contexts_handler
+        # )
 
-        self.add_handler(
-            cdp.runtime.ExecutionContextCreated, self._execution_contexts_handler
-        )
-        self.add_handler(
-            cdp.runtime.ExecutionContextDestroyed, self._execution_contexts_handler
-        )
-        self.add_handler(
-            cdp.runtime.ExecutionContextsCleared, self._execution_contexts_handler
-        )
-
-        self.add_handler(cdp.page.FrameAttached, self._frame_handler)
-        self.add_handler(cdp.page.FrameDetached, self._frame_handler)
-        self.add_handler(cdp.page.FrameStartedLoading, self._frame_handler)
-        self.add_handler(cdp.page.FrameStoppedLoading, self._frame_handler)
+        # self.add_handler(cdp.page.FrameAttached, self._frame_handler)
+        # self.add_handler(cdp.page.FrameDetached, self._frame_handler)
+        # self.add_handler(cdp.page.FrameStartedLoading, self._frame_handler)
+        # self.add_handler(cdp.page.FrameStoppedLoading, self._frame_handler)
 
     @property
     def frames_list(self) -> List[Frame]:

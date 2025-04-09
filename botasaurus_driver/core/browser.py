@@ -254,16 +254,19 @@ class Browser:
 
     def make_tab(self, target_info):
         from .tab import Tab
+        if target_info.type_ == 'iframe':
+            page_type = 'page'
+        else:
+            page_type = target_info.type_ or 'page'
+
         return Tab(
                 (
                     f"ws://{self.config.host}:{self.config.port}"
-                    f"/devtools/{target_info.type_ or 'page'}"  # all types are 'page' internally in chrome apparently
+                    f"/devtools/{page_type}"  # all types are 'page' internally in chrome apparently
                     f"/{target_info.target_id}"
                 ),
                 target=target_info,
-                browser=self,
-                add_handlers= target_info.type_ != 'background_page'
-            )
+                browser=self)
 
     def get(
         self,
@@ -303,7 +306,7 @@ class Browser:
             # first tab from browser.tabs
             connection = self.get_first_tab()
             # use the tab to navigate to new url
-            connection.send(cdp.runtime.disable())
+            # connection.send(cdp.runtime.disable())
             frame_id, _, *_ = connection.send(cdp.page.navigate(url, referrer=referrer))
             # update the frame_id on the tab
             connection.frame_id = frame_id
