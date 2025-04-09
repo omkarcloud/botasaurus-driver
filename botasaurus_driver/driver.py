@@ -267,15 +267,28 @@ class Element:
         self, selector: str, wait: Optional[int] = Wait.SHORT
     ) -> Union["IframeElement", "IframeTab"]:
         return self.select(selector, wait)
-
     def click(
-        self, selector: Optional[str] = None, wait: Optional[int] = Wait.SHORT
+        self, 
+        selector: Optional[str] = None, 
+        wait: Optional[int] = Wait.SHORT,
+        skip_move: bool = False
     ) -> None:
+        """Clicks the element
+        
+        Args:
+            selector: Optional selector to find element
+            wait: Maximum time to wait for element
+            skip_move: If True, uses direct click instead of human movement, Only applicable when human mode is enabled
+        """
         if selector:
-            self.wait_for_element(selector, wait).click()
+            element = self.wait_for_element(selector, wait)
+            if self._driver.is_human_mode_enabled:
+                self._driver._cursor.click(element, skip_move=skip_move)
+            else:
+                element.click()
         else:
             if self._driver.is_human_mode_enabled:
-                self._driver._cursor.click(self)
+                self._driver._cursor.click(self, skip_move=skip_move)
             else:
                 self._elem.click()
 
@@ -297,25 +310,44 @@ class Element:
         rect = self._get_bounding_rect_with_iframe_offset()
         return (x+rect.x,y+rect.y)
     
-    def click_at_point(self, x: int, y:int):
+    def click_at_point(self, x: int, y:int, skip_move: bool = False):
         if self._driver.is_human_mode_enabled:
-            with_human_mode(self._driver, lambda: self._driver._cursor.click(self._get_x_y_with_iframe_offset(x,y)))
+            with_human_mode(self._driver, lambda: self._driver._cursor.click(self._get_x_y_with_iframe_offset(x,y), skip_move=skip_move))
         else:
             self._tab.click_at_point(*self._get_x_y_with_iframe_offset(x,y))
 
-    def move_mouse_here(self):
-        with_human_mode(self._driver, lambda: self._driver._cursor.move_to(self))
+    def move_mouse_here(self, is_jump: bool = False):
+        """Moves mouse cursor to this element
+        
+        Args:
+            is_jump: If True, instantly jumps to element instead of smooth movement
+        """
+        with_human_mode(self._driver, lambda: self._driver._cursor.move_to(self, is_jump=is_jump))
 
-    def move_mouse_to_point(self, x: int, y:int):
-        with_human_mode(self._driver, lambda: self._driver._cursor.move_mouse_to_point(*self._get_x_y_with_iframe_offset(x,y)))
+    def move_mouse_to_point(self, x: int, y: int, is_jump: bool = False):
+        """Moves mouse cursor to specified coordinates
+        
+        Args:
+            x: X coordinate
+            y: Y coordinate
+            is_jump: If True, instantly jumps to coordinates instead of smooth movement
+        """
+        with_human_mode(self._driver, lambda: self._driver._cursor.move_mouse_to_point(*self._get_x_y_with_iframe_offset(x,y), is_jump=is_jump))
 
-    def move_mouse_to_element(self, selector: str, wait: Optional[int] = Wait.SHORT):
+    def move_mouse_to_element(self, selector: str, wait: Optional[int] = Wait.SHORT, is_jump: bool = False):
+        """Moves mouse cursor to element matching selector
+        
+        Args:
+            selector: CSS selector to find element
+            wait: Maximum time to wait for element 
+            is_jump: If True, instantly jumps to element instead of smooth movement
+        """
         elem = self.select(selector, wait)
         if not elem:
             print(f"Element not found for selector: {selector}")
             return False
         else:
-            elem.move_mouse_here()
+            elem.move_mouse_here(is_jump=is_jump)
             return True
 
     def mouse_press(self, x: int, y:int):
@@ -904,22 +936,36 @@ class BrowserTab:
         rect = self._get_bounding_rect_with_iframe_offset()
         return (x+rect.x,y+rect.y)
 
-    def click_at_point(self, x: int, y:int):
+    def click_at_point(self, x: int, y:int, skip_move: bool = False):
         if self.is_human_mode_enabled: 
-            with_human_mode(self, lambda: self._get_driver()._cursor.click(self._get_x_y_with_iframe_offset(x,y)))
+            with_human_mode(self, lambda: self._get_driver()._cursor.click(self._get_x_y_with_iframe_offset(x,y), skip_move=skip_move))
         else:
             self._tab.click_at_point(*self._get_x_y_with_iframe_offset(x,y))
 
-    def move_mouse_to_point(self, x: int, y:int):
-        with_human_mode(self._get_driver(), lambda: self._get_driver()._cursor.move_mouse_to_point(*self._get_x_y_with_iframe_offset(x,y)))
+    def move_mouse_to_point(self, x: int, y: int, is_jump: bool = False):
+        """Moves mouse cursor to specified coordinates
+        
+        Args:
+            x: X coordinate
+            y: Y coordinate
+            is_jump: If True, instantly jumps to coordinates instead of smooth movement
+        """
+        with_human_mode(self._get_driver(), lambda: self._get_driver()._cursor.move_mouse_to_point(*self._get_x_y_with_iframe_offset(x,y), is_jump=is_jump))
 
-    def move_mouse_to_element(self, selector: str, wait: Optional[int] = Wait.SHORT):
+    def move_mouse_to_element(self, selector: str, wait: Optional[int] = Wait.SHORT, is_jump: bool = False):
+        """Moves mouse cursor to element matching selector
+        
+        Args:
+            selector: CSS selector to find element
+            wait: Maximum time to wait for element
+            is_jump: If True, instantly jumps to element instead of smooth movement
+        """
         elem = self.select(selector, wait)
         if not elem:
             print(f"Element not found for selector: {selector}")
             return False
         else:
-            elem.move_mouse_here()
+            elem.move_mouse_here(is_jump=is_jump)
             return True
         
     def mouse_press(self, x: int, y:int):
@@ -954,21 +1000,29 @@ class BrowserTab:
     def is_element_present(self, selector: str, wait: Optional[int] = None) -> bool:
         return self.select(selector, wait) is not None
 
-    def click(self, selector: str, wait: Optional[int] = Wait.SHORT) -> None:
+    def click(
+        self, 
+        selector: str, 
+        wait: Optional[int] = Wait.SHORT,
+        skip_move: bool = False
+    ) -> None:
         elem = self.wait_for_element(selector, wait)
-        elem.click()
+        elem.click(skip_move=skip_move)
 
 
 
     def click_element_containing_text(
-        self, text: str, wait: Optional[int] = Wait.SHORT
+        self, 
+        text: str, 
+        wait: Optional[int] = Wait.SHORT,
+        skip_move: bool = False
     ) -> None:
         elem = self.get_element_containing_text(text, wait)
 
         if elem is None:
             raise ElementWithTextNotFoundException(text)
 
-        elem.click()
+        elem.click(skip_move=skip_move)
 
     def type(self, selector: str, text: str, wait: Optional[int] = Wait.SHORT) -> None:
         elem = self.wait_for_element(selector, wait)
@@ -1429,7 +1483,7 @@ class IframeTab(BrowserTab):
         self.iframe_elem = iframe_elem
         # iframe_elem can be none if using get_iframe_by_link and iframe is in shadowroot, todo: figure out how to get iframe el or coords of a tab, this will fix _get_bounding_rect_with_iframe_offset which will be wrong if using get_iframe_by_link and iframe is in shadowroot
         super().__init__(config, _tab_value, _parent_tab, driver, _browser)
-        self.run_cdp_command(cdp.runtime.disable())
+        # self.run_cdp_command(cdp.runtime.disable())
 
 
     def _make_element(self, elem):
@@ -1464,8 +1518,13 @@ class IframeTab(BrowserTab):
         # Ideally, this method should not be added, but we added it because users who use self.select instead of self.select_iframe get types of Element instead of IframeTab. We added these properties so users get the correct result when they call them.
         return self.select('body').get_shadow_root(wait)
     
-    def move_mouse_here(self):
-        self._get_iframe_elem().move_mouse_here()
+    def move_mouse_here(self, is_jump: bool = False):
+        """Moves mouse cursor to this element
+        
+        Args:
+            is_jump: If True, instantly jumps to element instead of smooth movement
+        """        
+        self._get_iframe_elem().move_mouse_here(is_jump=is_jump)
 
     def _get_iframe_elem(self):
         if self.iframe_elem:
@@ -1608,8 +1667,13 @@ class IframeElement(BrowserTab):
         return self._driver
 
 
-    def move_mouse_here(self):
-        self.elem.move_mouse_here()
+    def move_mouse_here(self, is_jump: bool = False):
+        """Moves mouse cursor to this element
+        
+        Args:
+            is_jump: If True, instantly jumps to element instead of smooth movement
+        """        
+        self.elem.move_mouse_here(is_jump=is_jump)
 
     def get_iframe_by_link(
         self, link_regex: Optional[str] = None, wait: Optional[int] = Wait.SHORT
@@ -1617,14 +1681,17 @@ class IframeElement(BrowserTab):
         return get_iframe_elem_by_link(self._driver,  self._tab, self._parent_tab, link_regex, wait)
 
     def click_element_containing_text(
-        self, text: str, wait: Optional[int] = Wait.SHORT
+        self, 
+        text: str, 
+        wait: Optional[int] = Wait.SHORT,
+        skip_move: bool = False
     ) -> None:
         elem = self.get_element_containing_text(text, wait)
 
         if elem is None:
             raise ElementWithTextNotFoundException(text)
 
-        elem.click()
+        elem.click(skip_move=skip_move)
 
     def get_link(
         self,
@@ -1758,15 +1825,13 @@ def get_iframe_tab(driver, internal_elem):
 
 
 
-def wait_for_iframe_tab_load(driver, iframe_tab):
-    iframe_tab.websocket_url = iframe_tab.websocket_url.replace("iframe", "page")
+
     # wait_till_document_is_ready(iframe_tab, True)
 
 
 def get_iframe_element_or_tab(iframe_tab:Tab, driver:'Driver', current_tab:Tab, _parent_tab:BrowserTab, internal_elem:CoreElement):
     elem = Element(driver, current_tab,  _parent_tab,internal_elem)
     if iframe_tab:
-        wait_for_iframe_tab_load(driver, iframe_tab)
         
         return IframeTab(elem, driver.config, iframe_tab, _parent_tab, driver, driver._browser)
     internal_elem.tree = internal_elem.content_document
@@ -1788,7 +1853,6 @@ def get_iframe_elem_by_link(driver:'BrowserTab', current_tab:Tab, _parent_tab:Br
           else: 
             return get_iframe_element_or_tab(iframe_tab, driver, current_tab, _parent_tab, el._elem)
         else:
-          wait_for_iframe_tab_load(driver, iframe_tab)
           return IframeTab(None, driver.config, iframe_tab, _parent_tab, driver, driver._browser)
         
             

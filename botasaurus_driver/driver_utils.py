@@ -176,14 +176,47 @@ def with_human_mode(driver, action):
     """
     is_disabled = not driver.is_human_mode_enabled
     driver.enable_human_mode()
+    # driver._cursor.hide_cursor_movements()
     try:
         return action()
     finally:
         if is_disabled:
             driver.disable_human_mode()
 
-def click_restoring_human_behaviour(driver, checkbox):
-    with_human_mode(driver, lambda: checkbox.click())
 
-def click_point_restoring_human_behaviour(driver, x,y):
-    with_human_mode(driver, lambda: driver.click_at_point(x,y))
+def with_human_mode(driver, action):
+    """
+    Temporarily enables human mode while executing the given action
+    
+    Args:
+        driver: The driver instance
+        action: Lambda function containing the action to perform with human mode enabled
+    """
+    is_disabled = not driver.is_human_mode_enabled
+    driver.enable_human_mode()
+    # driver._cursor.hide_cursor_movements()
+    try:
+        return action()
+    finally:
+        if is_disabled:
+            driver.disable_human_mode()
+
+def with_human_mode_hidden_cursor(driver, action):
+    """
+    Temporarily enables human mode while executing the given action
+    
+    Args:
+        driver: The driver instance
+        action: Lambda function containing the action to perform with human mode enabled
+    """
+    is_disabled = not driver.is_human_mode_enabled
+    driver.enable_human_mode()
+    _show_cursor_movements = driver._cursor._show_cursor_movements
+    driver._cursor.hide_cursor_movements()
+
+    try:
+        return action()
+    finally:
+        driver._cursor._show_cursor_movements = _show_cursor_movements
+        if is_disabled:
+            driver.disable_human_mode()

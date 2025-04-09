@@ -1,8 +1,21 @@
-from .driver_utils import click_restoring_human_behaviour, click_point_restoring_human_behaviour
+from .driver_utils import with_human_mode_hidden_cursor
 from .exceptions import CloudflareDetectionException, ShadowRootClosedException
 from .opponent import Opponent
 from time import sleep, time
 import random
+
+
+def click_restoring_human_behaviour(driver, checkbox):
+    def fn():
+        checkbox.move_mouse_here(is_jump=True)
+        checkbox.click(skip_move=True)
+    with_human_mode_hidden_cursor(driver, fn)
+
+def click_point_restoring_human_behaviour(driver, x,y):
+    def fn():
+        driver.move_mouse_to_point(is_jump=True)
+        driver.click_at_point(x,y,skip_move=True)
+    with_human_mode_hidden_cursor(driver, fn)
 
 
 def wait_till_document_is_ready(tab, wait_for_complete_page_load, timeout = 60):
@@ -26,8 +39,8 @@ def wait_till_document_is_ready(tab, wait_for_complete_page_load, timeout = 60):
         if elapsed_time > timeout:
             raise TimeoutError(f"Document did not become ready within {timeout} seconds")
 
-def istakinglong(iframe):
-    return "is taking longer than expected" in iframe.text
+def is_taking_long(iframe):
+    return iframe.run_js("(el) => (el.innerText || el.textContent).includes('is taking longer than expected')")
 
 def get_rayid(driver):
     ray = driver.select(".ray-id code")
@@ -94,19 +107,18 @@ def wait_till_cloudflare_leaves(driver, previous_ray_id):
                 start_time = time()
 
                 while True:
-
+                    opponent = driver.get_bot_detected_by()
+                    if opponent != Opponent.CLOUDFLARE:
+                        return
+                    
                     iframe = get_iframe_content(driver)
                     if iframe:
                         checkbox = get_checkbox(iframe)
-                        takinglong = istakinglong(iframe)
-                        if takinglong or checkbox:
+                        if checkbox or is_taking_long(iframe):
                             # new captcha given
                             print("Cloudflare has detected us. Exiting ...")
                             raise CloudflareDetectionException()
 
-                    opponent = driver.get_bot_detected_by()
-                    if opponent != Opponent.CLOUDFLARE:
-                        return
 
                     elapsed_time = time() - start_time
                     if elapsed_time > WAIT_TIME:
@@ -114,7 +126,7 @@ def wait_till_cloudflare_leaves(driver, previous_ray_id):
                         raise CloudflareDetectionException()
 
 
-                    sleep(0.83)
+                    sleep(1)
 
         elapsed_time = time() - start_time
         if elapsed_time > WAIT_TIME:
@@ -123,7 +135,7 @@ def wait_till_cloudflare_leaves(driver, previous_ray_id):
             )
             raise CloudflareDetectionException()
 
-        sleep(0.83)
+        sleep(1)
 
 def solve_full_cf(driver):
             iframe = get_iframe_content(driver)
@@ -157,7 +169,7 @@ def solve_full_cf(driver):
                 if elapsed_time > WAIT_TIME:
                     print("Cloudflare has not given us a captcha. Exiting ...")
                     raise CloudflareDetectionException()
-                sleep(0.83)
+                sleep(1)
 
 def get_checkbox(iframe):
     return iframe.select("input", wait=None)
@@ -186,9 +198,8 @@ def wait_till_cloudflare_leaves_widget(driver):
                             print("Cloudflare has detected us. Exiting ...")
                             raise CloudflareDetectionException()
 
-                        takinglong = istakinglong(iframe)
 
-                        if takinglong:
+                        if is_taking_long(iframe):
                             # new captcha given
                             print("Cloudflare has detected us. Exiting ...")
                             raise CloudflareDetectionException()
@@ -202,7 +213,7 @@ def wait_till_cloudflare_leaves_widget(driver):
                         print("Cloudflare has detected us. Exiting ...")
                         raise CloudflareDetectionException()
 
-                    sleep(0.83)
+                    sleep(1)
 
 
 def issuccess(iframe):
@@ -252,7 +263,7 @@ def solve_widget_cf(driver):
         if elapsed_time > WAIT_TIME:
             print("Cloudflare has not given us a captcha. Exiting ...")
             raise CloudflareDetectionException()
-        sleep(0.83)
+        sleep(1)
 
 def bypass_if_detected(driver):
     opponent = driver.get_bot_detected_by()
