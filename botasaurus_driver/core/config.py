@@ -260,7 +260,7 @@ class Config:
                     self._display.start()
                 except FileNotFoundError:
                     print(
-                        'To run in headfull mode, You need to install Xvfb. Please run "sudo apt-get install xvfb" in your terminal. (We are currently running in headless mode)'
+                        'To run in headfull mode with xvfb virtual display, You need to install Xvfb. Please run "sudo apt-get install xvfb" in your terminal. (Note, We are currently running in headless mode)'
                     )
                     args.append("--headless=new")
 

@@ -468,6 +468,7 @@ class Tab(Connection):
             ))
     def perform_get_element_at_point(self,x: int, y:int, raiseError = False):
         try:
+          doc: cdp.dom.Node = self.send(cdp.dom.get_document(-1, True))
          # ciel it
           import math
           x = math.ceil(x)
@@ -487,7 +488,6 @@ class Tab(Connection):
           node = self.send(cdp.dom.describe_node( nid, ))
         else:
             return None
-        doc: cdp.dom.Node = self.send(cdp.dom.get_document(-1, True))
         return element.create(node, self, doc)
 
     def get_element_at_point(self,x: int, y:int, timeout: Optional[int] = None):
