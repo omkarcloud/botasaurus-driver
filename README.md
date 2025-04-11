@@ -83,7 +83,7 @@ Botasaurus Driver provides several handy methods for web automation tasks such a
   )
 
   # Wait for page to fully load
-  driver.sleep(4)
+  driver.long_random_sleep()
   
   # Locate iframe containing the Cloudflare challenge
   iframe = driver.get_element_at_point(160, 290)
@@ -129,7 +129,7 @@ Botasaurus Driver provides several handy methods for web automation tasks such a
   # Visit the website
   driver.get("https://nopecha.com/demo/cloudflare")
   
-  # Let is load
+  # Wait for page to fully load
   driver.long_random_sleep()
   
   # Locate the element containing shadow root
