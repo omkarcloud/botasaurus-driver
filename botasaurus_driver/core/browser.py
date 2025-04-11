@@ -497,8 +497,8 @@ class Browser:
 
     def close(self):
         # close gracefully
-        self.close_chrome()
         self.close_tab_connections()
+        self.close_chrome()
         self.close_browser_connection()
         if self._process:
             if not wait_for_graceful_close(self._process):
