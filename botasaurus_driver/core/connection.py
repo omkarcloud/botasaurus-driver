@@ -3,7 +3,6 @@ from __future__ import annotations
 import collections
 import itertools
 import json
-import sys
 import threading
 import time
 from typing import (
@@ -20,6 +19,7 @@ from ..exceptions import ChromeException
 
 from . import util
 from .. import cdp
+import os
 
 T = TypeVar("T")
 
@@ -29,6 +29,11 @@ PING_TIMEOUT: int = 900  # 15 minutes
 
 TargetType = Union[cdp.target.TargetInfo, cdp.target.TargetID]
 
+
+def log_event(*values: object,):
+    DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
+    if DEBUG:
+        print(*values)
 
 class SettingClassVarNotAllowedException(PermissionError):
     pass
@@ -91,6 +96,7 @@ class Connection:
         self.recv_task = None
         self.enabled_domains = []
         self._last_result = []
+        self._is_target_destroyed = False
         self.listener: Listener = None
 
         self.__dict__.update(**kwargs)
@@ -150,20 +156,21 @@ class Connection:
         :param kw:
         :return:
         """
+        if self._is_target_destroyed:
+            self.raise_connection_failure_exception()
+
         # if not self.websocket or self.websocket.closed:
         if not self.websocket :
             try:
-                self.reconnect_websocket()
-                self.listener = Listener(self, self.reconnect_websocket)
+                self._create_websocket()
+                self.listener = Listener(self, self.create_websocket)
                 self.wait_for_socket_connection()
             except (Exception,) as e:
-                if self.listener:
-                    self.listener.cancel_event.set()
                 raise
         if not self.listener or not self.listener.running:
-            self.reconnect_websocket()
-            self.listener = Listener(self, self.reconnect_websocket)
-            self.listener.connected_event.wait(timeout=30)
+            self.create_websocket()
+            self.listener = Listener(self, self.create_websocket)
+            self.wait_for_socket_connection()
 
         # when a websocket connection is closed (either by error or on purpose)
         # and reconnected, the registered event listeners (if any), should be
@@ -171,11 +178,26 @@ class Connection:
 
         self._register_handlers()
 
-    def wait_for_socket_connection(self):
-        self.listener.connected_event.wait(timeout=30)
+    def raise_connection_failure_exception(self):
+        raise Exception(self._connection_failure_message)
 
-    def reconnect_websocket(self):
+    def wait_for_socket_connection(self):
+        start_time = time.time()
+        self._connection_failure_message = None
+        result = self.listener.connected_event.wait(timeout=30)
+        elapsed_time = time.time() - start_time
+        if self._connection_failure_message:
+            self.raise_connection_failure_exception()
+        
+        if not result:
+            raise TimeoutError("Failed to establish a connection")
+        log_event(f"Connected in {elapsed_time:.2f} seconds")
+
+    def create_websocket(self):
         self.close_socket_if_possible()
+        self._create_websocket()
+
+    def _create_websocket(self):
         self.websocket = websocket.WebSocketApp(self.websocket_url)
 
     def close(self):
@@ -184,19 +206,18 @@ class Connection:
         """
         self.close_connections()
 
-    def close_connections(self):
+    def close_connections(self, close_connections=True):
         if self.listener:
-                self.listener.cancel_event.set()
                 self.enabled_domains.clear()
-                # self.listener = None
+                self.listener = None
             
-        self.close_socket_if_possible()
+        self.close_socket_if_possible(close_connections)
 
-    def close_socket_if_possible(self):
+    def close_socket_if_possible(self, close_connections=True):
         if self.websocket:
-            self.websocket.close()
-            # self.websocket = None
-        
+            if close_connections:
+                self.websocket.close()
+            self.websocket = None
 
     def sleep(self, t: Union[int, float] = 0.25):
         self.update_target()
@@ -270,7 +291,7 @@ class Connection:
 
     def perform_send(self, cdp_obj, _is_update=False, wait_for_response=True):
         if not self.listener or not self.listener.running:
-            self.listener = Listener(self, self.reconnect_websocket)
+            self.listener = Listener(self, self.create_websocket)
         
         tx_id = next(self.__count__)
         tx  = make_request_body(id=tx_id, cdp_obj = cdp_obj)
@@ -360,10 +381,7 @@ class Listener:
 
         # /example/demo.py runs ~ 5 seconds faster, which is quite a lot.
 
-        is_interactive = getattr(sys, "ps1", sys.flags.interactive)
-        self.cancel_event = threading.Event()  # Event for cancellation
         self.connected_event = threading.Event()  # Event for cancellation
-        self._time_before_considered_idle = 0.10 if not is_interactive else 0.75
         self.idle = threading.Event()
         self.run()
 
@@ -371,13 +389,6 @@ class Listener:
         self.task = threading.Thread(target=self.listener_loop, daemon=True)
         self.task.start()
 
-    @property
-    def time_before_considered_idle(self):
-        return self._time_before_considered_idle
-
-    @time_before_considered_idle.setter
-    def time_before_considered_idle(self, seconds: Union[int, float]):
-        self._time_before_considered_idle = seconds
 
 
     @property
@@ -424,37 +435,58 @@ class Listener:
                     return
 
     def listener_loop(self):
-
-        while not self.cancel_event.is_set():
+            e = None
             while not self.connection.websocket:
                 self.reconnect_ws()
 
-            ws = self.connection.websocket
             def on_message(ws, message):
                 self.clear_idle()
                 self.handle_message(message)
                 self.set_idle()
                 
             def on_error(ws, error):
+                nonlocal e
+                e = str(error)
+                log_event('error ws', error, ws.url)
                 self.set_idle()
                 # print(f"Error: {error}")
                 pass
 
             def on_close(ws, x, w):
+                log_event('closed ws', ws.url)
                 self.set_idle()
                 # print("Connection closed")
                 pass
             def on_open(ws):
+                log_event('opened ws', ws.url)
                 self.connected_event.set()
                 self.set_idle()
-
+            
+            ws = self.connection.websocket
             ws.on_message = on_message
             ws.on_error = on_error
             ws.on_close = on_close
             ws.on_open = on_open
+            log_event('running ws')
 
             ws.run_forever()
             
+            if e:
+                # is_target_destroyed
+                # can be 'Connection to remote host was lost' in e
+                if 'No such target id:' in e:
+                    self.connection._is_target_destroyed = True
+                    self.connection._connection_failure_message = 'The target tab or iframe is no longer available. This may have occurred because you navigated to a different page, reloaded the current page, or closed the tab.'
+                else: 
+                    self.connection._connection_failure_message = e
+            
+            # 'Connection refused' in e:
+            # Already closed so no need to close again
+            self.connection.close_connections(close_connections=False)
+
+            # Hackish fix for wait_for_socket_connection
+            self.connected_event.set()
+            return
     def __repr__(self):
         s_idle = "[idle]" if self.idle.is_set() else "[busy]"
         s_running = f"[running: {self.running}]"
