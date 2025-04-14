@@ -48,7 +48,7 @@ def get_rayid(driver):
         return ray.text
     
 def get_turnstile_parent(driver):
-            turnstile = driver.select('[name="cf-turnstile-response"]', wait=None)
+            turnstile = driver.select('[name="cf-turnstile-response"]:not(#cf-invisible-turnstile [name="cf-turnstile-response"])', wait=None)
             if turnstile:
                 return turnstile.parent
             return None
@@ -94,8 +94,7 @@ def wait_till_cloudflare_leaves(driver, previous_ray_id):
     WAIT_TIME = 30
     start_time = time()
     while True:
-        opponent = driver.get_bot_detected_by()
-        if opponent != Opponent.CLOUDFLARE:
+        if not driver.is_bot_detected_by_cloudflare():
             return
         current_ray_id = get_rayid(driver)
         if current_ray_id:
@@ -107,8 +106,7 @@ def wait_till_cloudflare_leaves(driver, previous_ray_id):
                 start_time = time()
 
                 while True:
-                    opponent = driver.get_bot_detected_by()
-                    if opponent != Opponent.CLOUDFLARE:
+                    if not driver.is_bot_detected_by_cloudflare():
                         return
                     
                     iframe = get_iframe_content(driver)
@@ -140,8 +138,7 @@ def wait_till_cloudflare_leaves(driver, previous_ray_id):
 def solve_full_cf(driver):
             iframe = get_iframe_content(driver)
             while not iframe:
-                opponent = driver.get_bot_detected_by()
-                if opponent != Opponent.CLOUDFLARE:
+                if not driver.is_bot_detected_by_cloudflare():
                     return wait_till_document_is_ready(driver._tab, driver.config.wait_for_complete_page_load)
                 sleep(0.75)
                 iframe = get_iframe_content(driver)
@@ -153,8 +150,7 @@ def solve_full_cf(driver):
             while True:
                 iframe = get_iframe_content(driver)
                 while not iframe:
-                    opponent = driver.get_bot_detected_by()
-                    if opponent != Opponent.CLOUDFLARE:
+                    if not driver.is_bot_detected_by_cloudflare():
                         return wait_till_document_is_ready(driver._tab, driver.config.wait_for_complete_page_load)
                     sleep(0.75)
                     iframe = get_iframe_content(driver)
@@ -178,6 +174,8 @@ def get_checkbox(iframe):
 def wait_for_widget_iframe(driver):
     iframe = get_widget_iframe(driver)
     while not iframe:
+        if not driver.is_bot_detected_by_cloudflare():
+            return "bot_not_detected"
         sleep(0.75)
         iframe = get_widget_iframe(driver)
     return iframe
@@ -204,8 +202,7 @@ def wait_till_cloudflare_leaves_widget(driver):
                             print("Cloudflare has detected us. Exiting ...")
                             raise CloudflareDetectionException()
 
-                    opponent = driver.get_bot_detected_by()
-                    if opponent != Opponent.CLOUDFLARE:
+                    if not driver.is_bot_detected_by_cloudflare():
                         return
 
                     elapsed_time = time() - start_time
@@ -239,6 +236,9 @@ def click_clf_checkbox_widget(driver):
 def solve_widget_cf(driver):
     try:
       iframe = wait_for_widget_iframe(driver)
+      if iframe == "bot_not_detected":
+           return wait_till_document_is_ready(driver._tab, driver.config.wait_for_complete_page_load)
+      
     except ShadowRootClosedException:
       # Let it load
       sleep(0.75)
@@ -249,7 +249,8 @@ def solve_widget_cf(driver):
 
     while True:
         iframe = wait_for_widget_iframe(driver)
-
+        if iframe == "bot_not_detected":
+           return wait_till_document_is_ready(driver._tab, driver.config.wait_for_complete_page_load)
         if issuccess(iframe):
             return wait_till_document_is_ready(driver._tab, driver.config.wait_for_complete_page_load)
 

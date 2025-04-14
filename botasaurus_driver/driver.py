@@ -1355,7 +1355,7 @@ class BrowserTab:
             self.title == "Just a moment..."
         ):
             return Opponent.CLOUDFLARE
-        if self.select('[name="cf-turnstile-response"]', None):
+        if self.select('[name="cf-turnstile-response"]:not(#cf-invisible-turnstile [name="cf-turnstile-response"])', None):
             return Opponent.CLOUDFLARE
         
         pmx = self.get_element_containing_text(
@@ -1369,6 +1369,10 @@ class BrowserTab:
 
     def is_bot_detected(self) -> bool:
         return self.get_bot_detected_by() is not None
+
+    def is_bot_detected_by_cloudflare(self) -> bool:
+        opponent = self.get_bot_detected_by()
+        return opponent == Opponent.CLOUDFLARE
 
     def prompt_to_solve_captcha(self) -> None:
         print("")
