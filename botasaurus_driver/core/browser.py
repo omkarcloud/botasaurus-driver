@@ -227,7 +227,7 @@ class Browser:
 
             current_tab = next(
                 filter(
-                    lambda item: item.target_id == target_info.target_id, self.targets
+                    lambda item: item.target.target_id == target_info.target_id, self.targets
                 )
             )
             # todo: maybe connections need to be reinited?
@@ -247,7 +247,7 @@ class Browser:
 
         elif isinstance(event, cdp.target.TargetDestroyed):
             current_tab = next(
-                filter(lambda item: item.target_id == event.target_id, self.targets)
+                filter(lambda item: item.target.target_id == event.target_id, self.targets)
             )
             current_tab.close_connections()
             self.targets.remove(current_tab)
@@ -296,7 +296,7 @@ class Browser:
             # get the connection matching the new target_id from our inventory
             connection:Connection = next(
                 filter(
-                    lambda item: item._target.type_ == "page" and item.target_id == target_id,
+                    lambda item: item._target.type_ == "page" and item.target.target_id == target_id,
                     self.targets,
                 )
             )
@@ -422,7 +422,6 @@ class Browser:
         return info
 
     def update_targets(self):
-        targets: List[cdp.target.TargetInfo]
         targets = self._get_targets()
         for t in targets:
             for existing_tab in self.targets:
