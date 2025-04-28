@@ -135,6 +135,7 @@ class Config:
         self,
         headless=False,
         enable_xvfb_virtual_display=False,
+        xvfb_extra_args=None,
         proxy=None,
         profile=None,
         tiny_profile=False,
@@ -151,12 +152,14 @@ class Config:
         host="127.0.0.1", 
         port=None,
     ):
+        if xvfb_extra_args is None:
+            xvfb_extra_args = []
         if tiny_profile and profile is None:
             raise ValueError("Profile must be given when using tiny profile")
 
         if enable_xvfb_virtual_display and headless:
             raise ValueError("Xvfb Virtual Display cannot be used while headless mode is enabled")
-
+        self.xvfb_extra_args = xvfb_extra_args
         self.headless = headless
         self.proxy = proxy
         self.enable_xvfb_virtual_display = enable_xvfb_virtual_display  # New attribute
@@ -256,7 +259,7 @@ class Config:
                 from pyvirtualdisplay import Display
 
                 try:
-                    self._display = Display(visible=False, size=(1920, 1080))
+                    self._display = Display(visible=False, size=(1920, 1080), extra_args=self.xvfb_extra_args)
                     self._display.start()
                 except FileNotFoundError:
                     print(

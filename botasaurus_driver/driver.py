@@ -2065,6 +2065,7 @@ class Driver(BrowserTab):
         headless=False,
         enable_xvfb_virtual_display=False,
         proxy=None,
+        xvfb_extra_args=None,
         profile=None,
         tiny_profile=False,
         block_images=False,
@@ -2083,6 +2084,7 @@ class Driver(BrowserTab):
         self.config = Config(
             headless=headless,
             enable_xvfb_virtual_display=enable_xvfb_virtual_display,
+            xvfb_extra_args=xvfb_extra_args,
             proxy=proxy,
             profile=profile,
             tiny_profile=tiny_profile,
