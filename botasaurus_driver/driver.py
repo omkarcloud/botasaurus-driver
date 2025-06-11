@@ -2079,6 +2079,7 @@ class Driver(BrowserTab):
         beep=False,
         host=None,
         port=None,
+        browser_executable_path=None
     ):
         self.config = Config(
             headless=headless,
@@ -2098,6 +2099,7 @@ class Driver(BrowserTab):
             beep=beep,
             host=host,
             port=port,
+            browser_executable_path=browser_executable_path
         )
 
         self._tab_value: Tab = None
