@@ -150,6 +150,7 @@ class Config:
         beep=False,
         host="127.0.0.1", 
         port=None,
+        browser_executable_path=None
     ):
         if tiny_profile and profile is None:
             raise ValueError("Profile must be given when using tiny profile")
@@ -195,7 +196,8 @@ class Config:
             self.profile_directory = convert_to_absolute_profile_path(self.profile)
             self.is_temporary_profile = False
 
-        self.browser_executable_path = find_chrome_executable()
+        self.browser_executable_path = browser_executable_path if browser_executable_path and os.path.isfile(browser_executable_path) else find_chrome_executable()
+
 
         self.autodiscover_targets = True
 
