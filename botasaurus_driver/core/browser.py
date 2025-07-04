@@ -296,7 +296,7 @@ class Browser:
             # get the connection matching the new target_id from our inventory
             connection:Connection = next(
                 filter(
-                    lambda item: item._target.type_ == "page" and item.target_id == target_id,
+                    lambda item: item._target.type_ == "page" and item._target.target_id == target_id,
                     self.targets,
                 )
             )

@@ -160,6 +160,7 @@ class Tab(Connection):
         self.frames: typing.Dict[str, Frame] = {}
         self._dom = None
         self._window_id = None
+        self.is_closed = False
 
         # removed to avoid runtime detection
         # self.add_handler(
