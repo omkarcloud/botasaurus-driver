@@ -1082,8 +1082,7 @@ if (resp instanceof Promise) {
         :return:
         :rtype:
         """
-        if not self.is_closed:
-            self.is_closed = True
+        if not self.closed:
             if self.target and self.target.target_id:
                 self.send(cdp.target.close_target(target_id=self.target.target_id))
 
