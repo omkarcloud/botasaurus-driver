@@ -122,6 +122,7 @@ class PseudoType(enum.Enum):
     FILE_SELECTOR_BUTTON = "file-selector-button"
     DETAILS_CONTENT = "details-content"
     PICKER = "picker"
+    CHECKMARK = "checkmark"
 
     def to_json(self) -> str:
         return self.value
