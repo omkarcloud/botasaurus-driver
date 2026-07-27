@@ -42,7 +42,7 @@ def start(
     *,
     profile_directory: Optional[str] = None,
     headless: Optional[bool] = False,
-    browser_executable_path: Optional[str] = None,
+    chrome_executable_path: Optional[str] = None,
     browser_args: Optional[List[str]] = None,
     sandbox: Optional[bool] = True,
     lang: Optional[str] = None,
@@ -59,8 +59,8 @@ def start(
     :param headless:
     :type headless: bool
 
-    :param browser_executable_path:
-    :type browser_executable_path: str
+    :param chrome_executable_path:
+    :type chrome_executable_path: str
 
     :param browser_args: ["--some-chromeparam=somevalue", "some-other-param=someval"]
     :type browser_args: List[str]

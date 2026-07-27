@@ -154,6 +154,7 @@ class Tab(Connection):
     ):
         super().__init__(websocket_url, target, browser, **kwargs)
         self.browser = browser
+        self.is_closed = False         
 
         self.execution_contexts: typing.Dict[str, ExecutionContext] = {}
         # self.execution_contexts: List[ExecutionContext] = []

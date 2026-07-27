@@ -2070,6 +2070,7 @@ class Driver(BrowserTab):
         block_images=False,
         block_images_and_css=False,
         wait_for_complete_page_load=True,
+        chrome_executable_path=None,
         extensions=[],
         arguments=[],
         remove_default_browser_check_argument = False,
@@ -2079,7 +2080,6 @@ class Driver(BrowserTab):
         beep=False,
         host=None,
         port=None,
-        browser_executable_path=None
     ):
         self.config = Config(
             headless=headless,
@@ -2090,6 +2090,7 @@ class Driver(BrowserTab):
             block_images=block_images,
             block_images_and_css=block_images_and_css,
             wait_for_complete_page_load=wait_for_complete_page_load,
+            chrome_executable_path=chrome_executable_path,
             extensions=extensions,
             arguments=arguments,
             remove_default_browser_check_argument=remove_default_browser_check_argument,
@@ -2099,7 +2100,6 @@ class Driver(BrowserTab):
             beep=beep,
             host=host,
             port=port,
-            browser_executable_path=browser_executable_path
         )
 
         self._tab_value: Tab = None

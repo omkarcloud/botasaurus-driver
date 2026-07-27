@@ -147,6 +147,49 @@ return fetchData("LINK")
 """
 
 
+template_post = r"""function fetchData(url) {
+  return window.fetch(url, {
+    "headers": {
+        ...args['headers'],
+    },
+  "referrer": "REF",
+  "referrerPolicy": "strict-origin-when-cross-origin",
+  "body": args['body'],
+  "method": "POST",
+  "mode": "cors",
+  "credentials": "include"
+})
+  .then(response => {
+    return response.text().then(text => ({
+      error: null,
+      status_code: response.status,
+      status_message: response.statusText,
+      result: text,
+      headers:[...response.headers.entries()].reduce((acc, [key, value]) => {
+        acc[key] = value;
+        return acc;
+      }, {}),
+      final_url: response.url,
+      request_url: url,
+      cookies: document.cookie.split(';').reduce((cookies, cookie) => {
+        const [ name, value ] = cookie.split('=').map(c => c.trim());
+        return { ...cookies, [name]: value };
+        }, {}),
+    }));
+  })
+  .catch(error => {
+    return {
+      final_url: url,
+      request_url: url,
+      error: error.toString(),
+      // result: error.message,
+    };
+  });
+}
+return fetchData("LINK")
+"""
+
+
 template_many = r"""function fetchData(url) {
   return window.fetch(url, {
     "headers": {
@@ -353,8 +396,46 @@ class Request():
         data = run_js_with_args(self.driver, fetchcode, headers)
         if data['error']:
             raise DriverException(data['error'])
-        
+
         return _convert_to_requests_response(data, True)
+
+
+    def post(self, url, data=None, headers=None, referer=None,):
+        import json as _json
+
+        fetchcode = template_post.replace("LINK", url)
+
+        # Build the request body. dict/list -> JSON string with a JSON content-type
+        # (unless the caller overrides it); str/bytes -> sent as-is.
+        if data is None:
+            body = None
+        elif isinstance(data, (dict, list)):
+            body = _json.dumps(data)
+            headers = {"content-type": "application/json;charset=UTF-8", **(headers or {})}
+        else:
+            body = data if isinstance(data, str) else str(data)
+
+        args = {"body": body}
+
+        if headers is None:
+            fetchcode = fetchcode.replace("...args['headers'],", "")
+        else:
+            if not isinstance(headers, dict):
+                raise TypeError("Headers must be a dictionary.")
+            args["headers"] = headers
+
+        if referer is None:
+            fetchcode = fetchcode.replace('"referrer": "REF",', "")
+        else:
+            if not isinstance(referer, str):
+                raise TypeError("referer must be a string.")
+            fetchcode = fetchcode.replace("REF", referer)
+
+        resp = run_js_with_args(self.driver, fetchcode, args)
+        if resp['error']:
+            raise DriverException(resp['error'])
+
+        return _convert_to_requests_response(resp, True)
 
 
     def get_many(self, urls, headers=None, referer=None,):

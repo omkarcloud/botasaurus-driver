@@ -1,7 +1,6 @@
 import random
 import tempfile
 import os
-import gc
 import socket
 import sys
 from ..driver_utils import convert_to_absolute_profile_path
@@ -126,6 +125,23 @@ def add_essential_options(options, profile, window_size, user_agent):
         window_size = WindowSize.window_size_to_string(window_size)
         options.add_argument(f"--window-size={window_size}")
 
+def validate_and_get_file(fl):
+    is_windows = os.name == 'nt'
+    if is_windows and not os.path.isfile(fl):
+        chrome_path = os.path.join(fl, "chrome.exe")
+        if os.path.isfile(chrome_path):
+            return chrome_path
+        else:
+            if not os.path.exists(fl):
+                raise FileNotFoundError(f"Provided path does not exist: {fl}")
+            elif not os.path.isfile(fl):
+                raise FileNotFoundError(f"Chrome Executable not found in the provided directory: {fl}")
+            
+            raise Exception(f"Invalid Chrome path provided: {fl}")
+    elif not os.path.exists(fl):
+        raise FileNotFoundError(f"Provided path does not exist: {fl}")
+    
+    return fl
 class Config:
     """
     Config object
@@ -141,6 +157,7 @@ class Config:
         block_images=False,
         block_images_and_css=False,
         wait_for_complete_page_load=False,
+        chrome_executable_path=None,
         extensions=[],
         arguments=[],
         remove_default_browser_check_argument = False,
@@ -150,7 +167,6 @@ class Config:
         beep=False,
         host="127.0.0.1", 
         port=None,
-        browser_executable_path=None
     ):
         if tiny_profile and profile is None:
             raise ValueError("Profile must be given when using tiny profile")
@@ -196,7 +212,7 @@ class Config:
             self.profile_directory = convert_to_absolute_profile_path(self.profile)
             self.is_temporary_profile = False
 
-        self.browser_executable_path = browser_executable_path if browser_executable_path and os.path.isfile(browser_executable_path) else find_chrome_executable()
+        self.chrome_executable_path = validate_and_get_file(chrome_executable_path) if chrome_executable_path else find_chrome_executable()
 
 
         self.autodiscover_targets = True

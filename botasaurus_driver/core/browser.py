@@ -106,7 +106,7 @@ class Browser:
         *,
         profile_directory: PathLike = None,
         headless: bool = False,
-        browser_executable_path: PathLike = None,
+        chrome_executable_path: PathLike = None,
         browser_args: List[str] = None,
         sandbox: bool = True,
         **kwargs,
@@ -118,7 +118,7 @@ class Browser:
             config = Config(
                 profile_directory=profile_directory,
                 headless=headless,
-                browser_executable_path=browser_executable_path,
+                chrome_executable_path=chrome_executable_path,
                 browser_args=browser_args or [],
                 sandbox=sandbox,
                 **kwargs,
@@ -322,7 +322,7 @@ class Browser:
 
         self.config.host = self.config.host or "127.0.0.1"
         self.config.port = self.config.port or free_port()
-        exe = self.config.browser_executable_path
+        exe = self.config.chrome_executable_path
         params = self.config()
 
         self.create_chrome_with_retries(exe, params)
