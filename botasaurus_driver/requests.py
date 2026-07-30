@@ -114,6 +114,7 @@ template = r"""function fetchData(url) {
   "body": null,
   "method": "GET",
   "mode": "cors",
+  "signal": AbortSignal.timeout(args['timeout'] * 1000),
   "credentials": "include"
 })
   .then(response => {
@@ -137,7 +138,7 @@ template = r"""function fetchData(url) {
   .catch(error => {
     return {
       final_url: url,
-      request_url: url,    
+      request_url: url,
       error: error.toString(),
       // result: error.message,
     };
@@ -157,6 +158,7 @@ template_post = r"""function fetchData(url) {
   "body": args['body'],
   "method": "POST",
   "mode": "cors",
+  "signal": AbortSignal.timeout(args['timeout'] * 1000),
   "credentials": "include"
 })
   .then(response => {
@@ -206,6 +208,7 @@ template_many = r"""function fetchData(url) {
   "body": null,
   "method": "GET",
   "mode": "cors",
+  "signal": AbortSignal.timeout(args['timeout'] * 1000),
   "credentials": "include"
 })
   .then(response => {
@@ -260,6 +263,7 @@ function fetchData(url) {
         "body": null,
         "method": "GET",
         "mode": "cors",
+        "signal": AbortSignal.timeout(args['timeout'] * 1000),
         "credentials": "include"
     })
         .then(response => {
@@ -372,20 +376,33 @@ def run_js_with_args(driver, fetchcode, args):
           raise
         
 
+TIMEOUT_SIGNAL_LINE = "\"signal\": AbortSignal.timeout(args['timeout'] * 1000),"
+
+# Default timeout (seconds) for in-page fetches; pass timeout=None to disable.
+DEFAULT_TIMEOUT = 15
+
+def _apply_timeout(fetchcode, args, timeout):
+    if timeout is None:
+        return fetchcode.replace(TIMEOUT_SIGNAL_LINE, "")
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or timeout <= 0:
+        raise TypeError("timeout must be a positive number of seconds.")
+    args["timeout"] = timeout
+    return fetchcode
+
 class Request():
     def __init__(self, driver):
         self.driver = driver
 
-    def get(self, url, headers=None, referer=None,):
+    def get(self, url, headers=None, referer=None, timeout=DEFAULT_TIMEOUT,):
         fetchcode = template.replace("LINK", url)
-        
+        args = {}
         if headers is None:
             fetchcode = fetchcode.replace("...args['headers'],", "")
         else:
             if not isinstance(headers, dict):
               raise TypeError("Headers must be a dictionary.")
-            headers = {"headers":headers}
-        
+            args["headers"] = headers
+
         if referer is None:
             fetchcode = fetchcode.replace('"referrer": "REF",', "")
         else:
@@ -393,14 +410,16 @@ class Request():
               raise TypeError("referer must be a string.")
             fetchcode = fetchcode.replace("REF", referer)
 
-        data = run_js_with_args(self.driver, fetchcode, headers)
+        fetchcode = _apply_timeout(fetchcode, args, timeout)
+
+        data = run_js_with_args(self.driver, fetchcode, args or None)
         if data['error']:
             raise DriverException(data['error'])
 
         return _convert_to_requests_response(data, True)
 
 
-    def post(self, url, data=None, headers=None, referer=None,):
+    def post(self, url, data=None, headers=None, referer=None, timeout=DEFAULT_TIMEOUT,):
         import json as _json
 
         fetchcode = template_post.replace("LINK", url)
@@ -431,6 +450,8 @@ class Request():
                 raise TypeError("referer must be a string.")
             fetchcode = fetchcode.replace("REF", referer)
 
+        fetchcode = _apply_timeout(fetchcode, args, timeout)
+
         resp = run_js_with_args(self.driver, fetchcode, args)
         if resp['error']:
             raise DriverException(resp['error'])
@@ -438,7 +459,7 @@ class Request():
         return _convert_to_requests_response(resp, True)
 
 
-    def get_many(self, urls, headers=None, referer=None,):
+    def get_many(self, urls, headers=None, referer=None, timeout=DEFAULT_TIMEOUT,):
         fetchcode = template_many
         args = {}
         if headers is None:
@@ -447,13 +468,14 @@ class Request():
             if not isinstance(headers, dict):
               raise TypeError("Headers must be a dictionary.")
             args = {"headers":headers}
-        
+
         if referer is None:
             fetchcode = fetchcode.replace('"referrer": "REF",', "")
         else:
             if not isinstance(referer, str):
               raise TypeError("referer must be a string.")
             fetchcode = fetchcode.replace("REF", referer)
+        fetchcode = _apply_timeout(fetchcode, args, timeout)
         args['links'] = urls
         data = run_js_with_args(self.driver,fetchcode, args)
 
@@ -463,7 +485,7 @@ class Request():
         return [_convert_to_requests_response(x, False) for x in data]
 
 
-    def get_many_simultaneous(self, urls, parallel=10, request_interval=None, headers=None, referer=None,):
+    def get_many_simultaneous(self, urls, parallel=10, request_interval=None, headers=None, referer=None, timeout=DEFAULT_TIMEOUT,):
         fetchcode = template_many_simultaneous
         args = {}
         if headers is None:
@@ -472,14 +494,15 @@ class Request():
             if not isinstance(headers, dict):
               raise TypeError("Headers must be a dictionary.")
             args = {"headers":headers}
-        
+
         if referer is None:
             fetchcode = fetchcode.replace('"referrer": "REF",', "")
         else:
             if not isinstance(referer, str):
               raise TypeError("referer must be a string.")
             fetchcode = fetchcode.replace("REF", referer)
-        
+        fetchcode = _apply_timeout(fetchcode, args, timeout)
+
         # new Promise(resolve => setTimeout(resolve, args['wait'] * 1000))
         n = calculate_number_of_workers(urls, parallel)
 
