@@ -653,6 +653,7 @@ class Element:
                 abs_y = pos.top + scroll_y + (pos.height / 2)
                 pos.abs_x = abs_x
                 pos.abs_y = abs_y
+            
             return DictPosition(pos)
         except IndexError:
             pass    
@@ -1247,7 +1248,7 @@ class _Position(cdp.dom.Quad):
 
 class DictPosition(ContraDict):
     def __init__(self, position: _Position):
-        self._position = position
+        self._position = position  # Stores as list, loses methods & attributes!
         if position:
             self.left = position.left
             self.top = position.top
@@ -1298,7 +1299,11 @@ class DictPosition(ContraDict):
 
 
     def to_viewport(self, scale=1):
-        return self._position.to_viewport(scale)
+        # Don't rely on _position which may have lost its type
+        # Use the values already extracted
+        return cdp.page.Viewport(
+            x=self.x, y=self.y, width=self.width, height=self.height, scale=scale
+        )
 
     def __repr__(self):
         return str(self.to_dict())
