@@ -1068,45 +1068,61 @@ class Element:
         )
         video_download_path, relative_path = get_download_filename(filename)
         self.video_download_path = video_download_path
-        self.apply('(vid) => vid.pause()')
         self.apply(
             """
-            function extractVid(vid) {
-                var duration = {duration:.1f};
+            function extractVid(vid) {{
+                var duration = {duration};
+                // Synchronous pause/play bypasses Chrome's captureStream empty-frames bug instantly
+                var wasPlaying = !vid.paused;
+                if (wasPlaying) vid.pause();
+                
                 var stream = vid.captureStream();
-                var mr = new MediaRecorder(stream, {{audio:true, video:true}})
-                mr.ondataavailable = function(e) {
-                    var blob = e.data;
-                    f = new File([blob], {{name: {filename}, type:'octet/stream'}});
-                    var objectUrl = URL.createObjectURL(f);
+                
+                var options = {{mimeType: 'video/webm;codecs=vp8,opus'}};
+                if (MediaRecorder.isTypeSupported('video/mp4')) {{
+                    options = {{mimeType: 'video/mp4'}};
+                }}
+                
+                var mr = new MediaRecorder(stream, options);
+                var chunks = [];
+                mr.ondataavailable = function(e) {{
+                    if (e.data && e.data.size > 0) chunks.push(e.data);
+                }};
+                
+                mr.onstop = function() {{
+                    var type = options.mimeType.split(';')[0];
+                    var blob = new Blob(chunks, {{type: type}});
+                    var objectUrl = URL.createObjectURL(blob);
                     var link = document.createElement('a');
-                    link.setAttribute('href', objectUrl)
-                    link.setAttribute('download', {filename})
-                    link.style.display = 'none'
-                    document.body.appendChild(link)
-                    link.click()
-                    vid['_recording'] = false
-                    document.body.removeChild(link)
-                }
-                mr.start()
-                vid.addEventListener('ended' , (e) => mr.stop())
-                vid.addEventListener('pause' , (e) => mr.stop())
-                vid.addEventListener('abort', (e) => mr.stop())
-                if ( duration ) {
-                    setTimeout(() => {
-                        vid.pause();
-                        vid.play()
-                    }, duration);
-                }
-                vid['_recording'] = true ;
-            }
+                    link.setAttribute('href', objectUrl);
+                    link.setAttribute('download', {filename});
+                    link.style.display = 'none';
+                    document.body.appendChild(link);
+                    link.click();
+                    vid['_recording'] = false;
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(objectUrl);
+                }};
+                
+                mr.start();
+                vid.addEventListener('ended' , () => mr.stop());
+                vid.addEventListener('pause' , () => mr.stop());
+                vid.addEventListener('abort', () => mr.stop());
+                
+                if (duration) {{
+                    setTimeout(() => {{
+                        if (mr.state === 'recording') mr.stop();
+                    }}, duration);
+                }}
+                vid['_recording'] = true;
+                
+                if (wasPlaying) vid.play();
+            }}
             """.format(
                 filename=f'"{filename}"' if filename else 'document.title + ".mp4"',
                 duration=int(duration * 1000) if duration else 0,
             )
         )
-        self.apply('(vid) => vid.play()')
-        self._tab
         return relative_path
     def is_video_downloaded(self):
         isrecording = self.apply('(vid) => vid["_recording"]')
