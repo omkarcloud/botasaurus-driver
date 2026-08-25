@@ -242,9 +242,10 @@ class Config:
             "--password-store=basic",
             "--disable-infobars",
             "--disable-breakpad",
+            "--disable-background-networking",
             "--disable-dev-shm-usage",
             "--disable-session-crashed-bubble",
-            "--disable-features=IsolateOrigins,site-per-process",
+            "--disable-features=IsolateOrigins,site-per-process,OptimizationHints",
             "--disable-search-engine-choice-screen",
 
         ]
