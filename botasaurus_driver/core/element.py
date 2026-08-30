@@ -9,6 +9,7 @@ from ..exceptions import ShadowRootClosedException, ChromeException, DriverExcep
 from ..driver_utils import create_screenshot_filename, get_download_directory, get_download_filename
 
 from . import util
+from . import keys
 from ._contradict import ContraDict
 from .config import PathLike
 from .. import cdp
@@ -758,9 +759,7 @@ class Element:
         """
         self.raise_if_disconnected()
         self.apply("(elem) => elem.focus()")
-        for char in list(text):
-            self._tab.send(cdp.input_.dispatch_key_event("char", text=char))
-
+        keys.type_text(self._tab, text)
         self.update()
     def send_file(self, *file_paths):
         """
