@@ -53,6 +53,13 @@ Botasaurus Driver provides several handy methods for web automation tasks such a
   element.select_option("select#fruits", index=2)  # Select an option
   ```
 
+  `type`/`send_keys` dispatch real keydown/keyup events (not a synthetic char per character), so pages that listen for `keydown`/`keyup` or inspect `event.code`/`event.keyCode` see a faithful sequence. Characters without a physical key (emoji, non-Latin scripts) fall back to `insertText`. `\n` and `\r\n` each send one Enter:
+  ```python
+  driver.type("textarea", "line one\nline two")
+  driver.type("textarea", "line one\r\nline two")  # CRLF collapsed to a single Enter
+  driver.type("input[name='note']", "你好 👋")  # Unmapped characters use insertText
+  ```
+
 - Retrieving element properties:
   ```python
   header_text = driver.get_text("h1")  # Get text content
