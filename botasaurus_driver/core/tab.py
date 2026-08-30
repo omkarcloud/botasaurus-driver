@@ -10,6 +10,7 @@ from ..exceptions import handle_exception, NoSuchElementExistsException, Referen
 from ..driver_utils import create_screenshot_filename, get_download_directory, get_download_filename
 
 from . import element
+from . import keys
 from . import util
 from .config import PathLike
 from .connection import Connection
@@ -1557,7 +1558,12 @@ if (resp instanceof Promise) {
         :rtype:
         """
         body = self.select("body")
-        body.send_keys("thisisunsafe")
+        body.apply("(elem) => elem.focus()")
+        # Type directly on the tab: typing "thisisunsafe" makes Chrome advance
+        # past the interstitial, which navigates the page and invalidates the
+        # body node, so Element.send_keys' trailing self.update() would raise a
+        # stale-node error. Going through the keyboard helper avoids that.
+        keys.type_text(self, "thisisunsafe")
 
     def mouse_move(self, x: float, y: float, steps=10, flash=False):
         self.send(cdp.input_.dispatch_mouse_event("mouseMoved", x=x, y=y))
