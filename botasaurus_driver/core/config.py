@@ -49,7 +49,7 @@ def free_port():
                 free_socket.listen(5)
                 free_socket.close()
                 return port
-            except:
+            except OSError:
                 continue
 
 
